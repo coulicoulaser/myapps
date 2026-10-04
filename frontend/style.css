@@ -98,6 +98,9 @@ label { display: block; font-size: .82rem; color: rgba(255,255,255,.8); margin: 
 label.check { display: flex; align-items: center; gap: .5rem; font-size: .9rem; color: #fff; cursor: pointer; }
 
 /* ---------- Identité (logo + nom) ---------- */
+/* Le conteneur du logo est lui-même en flex : sinon il forme une ligne de texte qui réserve
+   la place des jambages (y, p) sous le logo et le décale vers le haut dans la barre. */
+.brand-slot { display: inline-flex; align-items: center; min-width: 0; line-height: 1; }
 .lockup { display: inline-flex; align-items: center; gap: .6rem; min-width: 0; }
 .lockup .mark { height: 32px; width: auto; max-width: 160px; object-fit: contain; display: block; }
 .lockup .mark.plate { background: #fff; border-radius: 9px; padding: 4px; }
@@ -107,7 +110,7 @@ label.check { display: flex; align-items: center; gap: .5rem; font-size: .9rem; 
 .brand-slot.lg .lockup .mark { height: 54px; max-width: 240px; }
 .brand-slot.lg .lockup .mono { width: 54px; height: 54px; font-size: 1.4rem; border-radius: 15px; }
 .brand-slot.lg .lockup .word { font-size: 1.9rem; }
-.brand-sub { font-size: 1rem; opacity: .6; font-weight: 500; margin-left: .2rem; }
+.brand-sub { font-size: 1rem; line-height: 1; opacity: .6; font-weight: 500; margin-left: .2rem; }
 
 /* ---------- Écran d'attente ---------- */
 .splash { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.4rem; }
@@ -416,21 +419,23 @@ label.check { display: flex; align-items: center; gap: .5rem; font-size: .9rem; 
 
 /* =====================================================================
    Mouvement — style Flutter / Material 3
-   Règles : les éléments « verre » (backdrop-filter) ne s'animent qu'en
-   transformation, jamais en opacité (sinon leur flou saute) ; l'opacité est
-   réservée à leur contenu. Tout est coupé si le système demande moins
-   d'animations, ou si l'administrateur les désactive (html.no-motion).
+   Règle « verre » : jamais d'opacité sur un CONTENEUR d'éléments à
+   backdrop-filter (il devient la limite de leur flou, qui saute) ; sur
+   l'élément verre lui-même, le fondu est sans danger. Les conteneurs
+   (vues, #portal, .admin-wrap, .added-apps) ne font que se déplacer.
+   Tout est coupé si le système demande moins d'animations, ou si
+   l'administrateur les désactive (html.no-motion).
    ===================================================================== */
-@keyframes lift { from { transform: translateY(24px) scale(.98); } to { transform: none; } }
-@keyframes popIn { from { transform: translateY(18px) scale(.88); } to { transform: none; } }
+@keyframes lift { from { opacity: 0; transform: translateY(24px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes popIn { from { opacity: 0; transform: translateY(18px) scale(.88); } 60% { opacity: 1; } to { opacity: 1; transform: none; } }
 @keyframes contentIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes growBar { from { transform: scaleY(0); } to { transform: none; } }
 @keyframes slideInX { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
-@keyframes snackIn { from { transform: translate(-50%, 140%); } to { transform: translate(-50%, 0); } }
+@keyframes snackIn { from { opacity: 0; transform: translate(-50%, 140%); } to { opacity: 1; transform: translate(-50%, 0); } }
 @keyframes snackOut { to { transform: translate(-50%, 140%); opacity: 0; } }
-@keyframes dropIn { from { transform: translateY(-6px) scale(.96); } to { transform: none; } }
-@keyframes dialogIn { from { transform: translateY(24px) scale(.92); } to { transform: none; } }
-@keyframes dialogOut { to { transform: translateY(16px) scale(.94); } }
+@keyframes dropIn { from { opacity: 0; transform: translateY(-6px) scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes dialogIn { from { opacity: 0; transform: translateY(24px) scale(.92); } to { opacity: 1; transform: none; } }
+@keyframes dialogOut { to { opacity: 0; transform: translateY(16px) scale(.94); } }
 @keyframes scrimIn { from { background-color: transparent; backdrop-filter: blur(0); -webkit-backdrop-filter: blur(0); } }
 @keyframes scrimOut { to { background-color: transparent; backdrop-filter: blur(0); -webkit-backdrop-filter: blur(0); } }
 @keyframes logoIn { from { transform: scale(.6) rotate(-8deg); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -492,6 +497,9 @@ label.check { display: flex; align-items: center; gap: .5rem; font-size: .9rem; 
 @keyframes headSwap { from { opacity: 0; transform: translateY(10px); } }
 html[data-nav="fwd"] #view-admin .admin-wrap { animation: navInRight var(--dur-m) var(--ease-decel) backwards; }
 html[data-nav="back"] #portal { animation: navInLeft var(--dur-m) var(--ease-decel) backwards; }
+html[data-nav="fwd"] .admin-nav { animation: fadeIn var(--dur-m) var(--ease-decel) backwards; }
+html[data-nav="back"] .portal-head > * { animation: headSwap var(--dur-m) var(--ease-decel) backwards; }
+@keyframes fadeIn { from { opacity: 0; } }
 html[data-nav="fwd"] .setup-body > * { animation: textInRight var(--dur-m) var(--ease-decel) backwards; }
 html[data-nav="back"] .setup-body > * { animation: textInLeft var(--dur-m) var(--ease-decel) backwards; }
 html[data-nav="fwd"] .setup-body > .added-apps { animation-name: navInRight; }
@@ -500,7 +508,7 @@ html[data-nav="back"] .setup-body > .added-apps { animation-name: navInLeft; }
    puis les nouvelles arrivent en cascade. */
 #sections.leaving .tile > .ico, #sections.leaving .tile > .tname, #sections.leaving .section-head > *,
 #sections.leaving .empty { opacity: 0; transition: opacity 90ms var(--ease-accel); }
-#sections.leaving .tile { transform: scale(.94); transition: transform 110ms var(--ease-accel); }
+#sections.leaving .tile { opacity: 0; transform: scale(.94); transition: transform 110ms var(--ease-accel), opacity 110ms var(--ease-accel); }
 .portal-head.swap > * { animation: headSwap var(--dur-m) var(--ease-decel) backwards; }
 
 /* Firefox : pas de translation sur les grands blocs (rectangle fantôme au repaint) */

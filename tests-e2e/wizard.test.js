@@ -112,6 +112,11 @@ function check(cond, msg) { if (!cond) throw new Error("ÉCHEC : " + msg); conso
     await waitFor(() => $("#adminMain h1") && !/Erreur/.test($("#adminMain").textContent.slice(0, 80)), "onglet " + tab);
   }
   check(true, "9 onglets d'administration rendus");
+  // Régression 1.3.2 : l'animation d'entrée se jouait sur l'onglet précédent, encore affiché.
+  d.querySelector('#adminNav a[data-tab="users"]').click();
+  check(!$("#adminMain").classList.contains("enter"), "pas d'animation d'entrée sur l'ancien onglet pendant le chargement");
+  await waitFor(() => /Utilisateurs/.test($("#adminMain h1")?.textContent || "") && $("#adminMain").classList.contains("enter"), "animation d'entrée sur le nouvel onglet");
+  check(true, "animation d'entrée jouée sur le nouvel onglet une fois affiché");
   // Mouvement : encre au clic, fermeture animée de la boîte de dialogue
   const tile = d.querySelector("#sections .tile");
   if (tile) {

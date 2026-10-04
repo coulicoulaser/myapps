@@ -3,6 +3,20 @@
 Toutes les évolutions notables sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/), versionnage [SemVer](https://semver.org/lang/fr/) (MAJOR.MINOR.PATCH).
 
+## [1.3.3] — 2026-10-04
+### Corrigé
+- **Administration** : en changeant de menu, l'animation d'entrée se jouait d'abord sur le
+  menu qu'on quittait (encore affiché pendant le chargement du suivant). Elle se joue
+  maintenant sur le nouveau menu, une fois affiché.
+- **Logo et nom mal centrés dans la barre du haut** (portail et administration) : leur
+  conteneur formait une ligne de texte qui réservait la place des jambages sous le logo,
+  ce qui le remontait de quelques pixels. Ils sont maintenant centrés sur la hauteur de la barre.
+
+### Modifié
+- Léger fondu ajouté aux animations : tuiles, lignes et panneaux de l'administration, boîte
+  de dialogue, menus déroulants, notifications, menu de l'administration. Le fondu porte sur
+  les éléments eux-mêmes, jamais sur leurs conteneurs : le flou reste net.
+
 ## [1.3.2] — 2026-10-04
 ### Corrigé
 - **Flou qui sautait pendant les animations** (changement de dashboard, entrée dans

@@ -387,16 +387,22 @@ function enterAdmin(tab = "apps") {
   $$("#adminNav a").forEach((a) => (a.onclick = () => selectAdminTab(a.dataset.tab)));
   selectAdminTab(tab);
 }
+// Entrée en cascade du contenu d'un onglet, une fois ce contenu affiché (posée au clic,
+// elle rejouait l'animation de l'onglet précédent, encore à l'écran pendant le chargement).
+// Pas à chaque enregistrement : seulement à l'ouverture d'un onglet.
+function playAdminEnter() {
+  const main = $("#adminMain");
+  $$(".list > .row, .atable tbody tr", main).forEach((el, i) => el.style.setProperty("--i", i));
+  main.classList.remove("enter"); void main.offsetWidth; main.classList.add("enter");
+  clearTimeout(playAdminEnter._t); playAdminEnter._t = setTimeout(() => main.classList.remove("enter"), 900);
+}
+
 // Clics rapides entre onglets : un onglet lent qui finit après le suivant écraserait
 // son contenu. Dans ce cas, l'onglet demandé en dernier est simplement réaffiché.
 let _tabSeq = 0, _tabDone = false, _tabCur = null;
 function selectAdminTab(tab) {
   const seq = ++_tabSeq;
   _tabCur = tab; _tabDone = false;
-  // Entrée en cascade seulement à l'ouverture d'un onglet, pas à chaque enregistrement.
-  const main = $("#adminMain");
-  main.classList.remove("enter"); void main.offsetWidth; main.classList.add("enter");
-  clearTimeout(selectAdminTab._t); selectAdminTab._t = setTimeout(() => main.classList.remove("enter"), 900);
   $$("#adminNav a").forEach((a) => a.classList.toggle("active", a.dataset.tab === tab));
   runAdminTab(tab, seq);
 }
@@ -406,7 +412,7 @@ function runAdminTab(tab, seq) {
     .finally(() => {
       if (seq === _tabSeq) {
         _tabDone = true;
-        $$("#adminMain .list > .row, #adminMain .atable tbody tr").forEach((el, i) => el.style.setProperty("--i", i));
+        playAdminEnter();
       }
       else if (_tabDone) { _tabDone = false; runAdminTab(_tabCur, _tabSeq); }
     });

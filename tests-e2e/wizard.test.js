@@ -112,6 +112,21 @@ function check(cond, msg) { if (!cond) throw new Error("ÉCHEC : " + msg); conso
     await waitFor(() => $("#adminMain h1") && !/Erreur/.test($("#adminMain").textContent.slice(0, 80)), "onglet " + tab);
   }
   check(true, "9 onglets d'administration rendus");
+  // Mouvement : encre au clic, fermeture animée de la boîte de dialogue
+  const tile = d.querySelector("#sections .tile");
+  if (tile) {
+    tile.dispatchEvent(new w.MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 5, clientY: 5 }));
+    check(tile.querySelector(":scope > .ink > span"), "encre créée au clic sur une tuile");
+  }
+  $("#adminLink").click();
+  d.querySelector('#adminNav a[data-tab="apps"]').click();
+  await waitFor(() => $("#addApp"), "onglet applications");
+  $("#addApp").click();
+  check(!$("#modal").classList.contains("hidden"), "boîte de dialogue ouverte");
+  $("#mCancel").click();
+  check($("#modal").classList.contains("closing"), "fermeture animée en cours");
+  await waitFor(() => $("#modal").classList.contains("hidden"), "boîte de dialogue fermée");
+
   // Mises à jour : vérification réelle contre GitHub, l'état s'affiche (à jour, disponible ou erreur)
   $("#adminLink").click();
   d.querySelector('#adminNav a[data-tab="updates"]').click();

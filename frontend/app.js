@@ -143,16 +143,38 @@ async function enterApp() {
 
 function renderTabs(tabs) {
   const el = $("#tabs");
-  el.innerHTML = tabs.map((t) => `<a data-slug="${esc(t.slug)}">${esc(t.name)}</a>`).join("");
+  el.innerHTML = `<span class="tab-ind no-anim"></span>` + tabs.map((t) => `<a data-slug="${esc(t.slug)}">${esc(t.name)}</a>`).join("");
   el.style.display = tabs.length > 1 ? "flex" : "none";
-  $$("a", el).forEach((a) => (a.onclick = () => openDashboard(a.dataset.slug)));
+  $$("a", el).forEach((a) => (a.onclick = () => openDashboard(a.dataset.slug, true)));
 }
 
-async function openDashboard(slug) {
+// Pastille d'onglet actif qui glisse vers l'onglet choisi.
+function moveTabIndicator() {
+  const ind = $("#tabs .tab-ind"), a = $("#tabs a.active");
+  if (!ind) return;
+  if (!a) { ind.style.width = "0"; return; }
+  ind.style.transform = `translate(${a.offsetLeft}px, ${a.offsetTop}px)`;
+  ind.style.width = a.offsetWidth + "px";
+  ind.style.height = a.offsetHeight + "px";
+  if (ind.classList.contains("no-anim")) requestAnimationFrame(() => requestAnimationFrame(() => ind.classList.remove("no-anim")));
+}
+window.addEventListener("resize", () => {
+  const ind = $("#tabs .tab-ind"); if (!ind) return;
+  ind.classList.add("no-anim"); moveTabIndicator();
+});
+
+async function openDashboard(slug, animate = false) {
   let d;
   try { d = await api("/api/me/dashboard/" + encodeURIComponent(slug)); } catch (e) { toast(e.message); return; }
-  state.dash = d;
   $$("#tabs a").forEach((a) => a.classList.toggle("active", a.dataset.slug === slug));
+  moveTabIndicator();
+  // Changement d'onglet : fondu enchaîné (Material « fade through ») ; sinon tuiles en cascade.
+  if (!(animate && withTransition("dash", () => renderDashboard(d, false)))) renderDashboard(d, true);
+}
+
+function renderDashboard(d, cascade) {
+  state.dash = d;
+  $("#sections").classList.toggle("calm", !cascade);
   $("#dashTitle").textContent = d.name;
   const first = (state.me.full_name || state.me.username).split(" ")[0];
   $("#dashHello").textContent = "Bonjour " + first + " 👋";
@@ -169,21 +191,22 @@ async function openDashboard(slug) {
     return;
   }
   const editing = state.me.is_admin && state.editMode;
+  let n = 0;                                            // rang global des tuiles : cascade d'une section à l'autre
   sec.innerHTML = d.groups.map((g) => `
     <section class="section" data-agid="${g.id}">
       <div class="section-head" ${editing ? 'draggable="true"' : ""}>${editing ? `<span class="drag-h" title="Glisser pour réordonner">⠿</span>` : ""}
         <span class="bar" ${g.color ? `style="background:${esc(g.color)}"` : ""}></span>
         <h2>${esc(g.name)}</h2><span class="cnt">${g.apps.length}</span></div>
-      <div class="grid" data-gid="${g.id}">${g.apps.map((a) => tileHtml(a, editing)).join("") || `<div class="muted">Vide — ajoutez des applications à cette section dans l'administration.</div>`}</div>
+      <div class="grid" data-gid="${g.id}">${g.apps.map((a) => tileHtml(a, editing, n++)).join("") || `<div class="muted">Vide — ajoutez des applications à cette section dans l'administration.</div>`}</div>
     </section>`).join("");
   if (editing) enableDnD();
 }
 
-function tileHtml(a, admin) {
+function tileHtml(a, admin, i = 0) {
   const ico = a.image_url ? `<img src="${esc(a.image_url)}" alt="" loading="lazy">` : `<span class="ph">${esc(initials(a.name))}</span>`;
   const tip = a.tooltip ? `<span class="tip">${esc(a.tooltip)}</span>` : "";
   const tgt = a.open_new_tab ? ` target="_blank" rel="noopener"` : "";
-  return `<a class="tile glass" href="${esc(a.url)}"${tgt} data-aid="${a.id}"${admin ? ' draggable="true"' : ""}><div class="ico">${ico}</div><span class="tname">${esc(a.name)}</span>${tip}</a>`;
+  return `<a class="tile glass" style="--i:${i}" href="${esc(a.url)}"${tgt} data-aid="${a.id}"${admin ? ' draggable="true"' : ""}><div class="ico">${ico}</div><span class="tname">${esc(a.name)}</span>${tip}</a>`;
 }
 
 // Glisser-déposer (admin) : tuiles dans une section, sections entre elles.
@@ -295,15 +318,16 @@ document.addEventListener("click", (e) => { if (!$("#userMenu").contains(e.targe
 $("#logoutBtn").onclick = logout;
 $("#adminLink").onclick = () => { $("#userDrop").classList.add("hidden"); enterAdmin(); };
 $("#goHome").onclick = () => enterApp();
-$("#adminBrand").onclick = () => enterApp();
-$("#backPortal").onclick = () => enterApp();
+const backToPortal = () => { withTransition("back", () => show("app")); enterApp(); };
+$("#adminBrand").onclick = backToPortal;
+$("#backPortal").onclick = backToPortal;
 
 // ---- Mode édition (admin) ----
 $("#editToggle").onclick = () => {
   if (!state.me?.is_admin) return;
   state.editMode = !state.editMode;
   applyEditMode();
-  if (state.dash) openDashboard(state.dash.slug);
+  if (state.dash) renderDashboard(state.dash, true);
 };
 function applyEditMode() {
   const on = state.editMode, btn = $("#editToggle");
@@ -318,7 +342,8 @@ function modal(title, bodyHtml, onSave, saveLabel = "Enregistrer") {
   $("#modalTitle").textContent = title;
   $("#modalBody").innerHTML = bodyHtml;
   $("#modalFoot").innerHTML = `<button class="btn-ghost" id="mCancel">Annuler</button>${onSave ? `<button class="btn-accent" id="mSave">${esc(saveLabel)}</button>` : ""}`;
-  $("#modal").classList.remove("hidden");
+  clearTimeout(closeModal._t);
+  $("#modal").classList.remove("hidden", "closing");
   $("#mCancel").onclick = closeModal;
   $("#modalClose").onclick = closeModal;
   if (onSave) $("#mSave").onclick = async () => {
@@ -326,7 +351,12 @@ function modal(title, bodyHtml, onSave, saveLabel = "Enregistrer") {
     try { await onSave(); closeModal(); } catch (e) { toast(e.message); } finally { b.classList.remove("loading"); }
   };
 }
-function closeModal() { $("#modal").classList.add("hidden"); }
+function closeModal() {
+  const m = $("#modal");
+  if (m.classList.contains("hidden") || m.classList.contains("closing")) return;
+  m.classList.add("closing");
+  closeModal._t = setTimeout(() => m.classList.add("hidden"), 170);
+}
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#modal").classList.contains("hidden")) closeModal(); });
 
 function checklist(id, options, selected) {
@@ -345,7 +375,7 @@ const adminData = {};
 const ADMIN_TABS = {};
 function enterAdmin(tab = "apps") {
   if (!state.me.is_admin) return;
-  show("admin");
+  if ($("#view-admin").classList.contains("hidden")) withTransition("fwd", () => show("admin"));
   setBg(state.branding.dashboard_background);
   $$("#adminNav a").forEach((a) => (a.onclick = () => selectAdminTab(a.dataset.tab)));
   selectAdminTab(tab);
@@ -356,6 +386,10 @@ let _tabSeq = 0, _tabDone = false, _tabCur = null;
 function selectAdminTab(tab) {
   const seq = ++_tabSeq;
   _tabCur = tab; _tabDone = false;
+  // Entrée en cascade seulement à l'ouverture d'un onglet, pas à chaque enregistrement.
+  const main = $("#adminMain");
+  main.classList.remove("enter"); void main.offsetWidth; main.classList.add("enter");
+  clearTimeout(selectAdminTab._t); selectAdminTab._t = setTimeout(() => main.classList.remove("enter"), 900);
   $$("#adminNav a").forEach((a) => a.classList.toggle("active", a.dataset.tab === tab));
   runAdminTab(tab, seq);
 }
@@ -363,7 +397,10 @@ function runAdminTab(tab, seq) {
   ADMIN_TABS[tab]()
     .catch((e) => { if (seq === _tabSeq) $("#adminMain").innerHTML = `<div class="glass panel"><p class="muted">Erreur : ${esc(e.message)}</p></div>`; })
     .finally(() => {
-      if (seq === _tabSeq) _tabDone = true;
+      if (seq === _tabSeq) {
+        _tabDone = true;
+        $$("#adminMain .list > .row, #adminMain .atable tbody tr").forEach((el, i) => el.style.setProperty("--i", i));
+      }
       else if (_tabDone) { _tabDone = false; runAdminTab(_tabCur, _tabSeq); }
     });
 }
@@ -856,6 +893,7 @@ ADMIN_TABS.settings = async function () {
       <label class="check"><input type="checkbox" id="bShow" ${B.show_name ? "checked" : ""}> Afficher le nom à côté du logo</label>
       <label class="check"><input type="checkbox" id="bPlate" ${B.logo_plate ? "checked" : ""}> Pastille blanche derrière le logo</label>
     </div>
+    <label class="check" style="margin-top:.5rem"><input type="checkbox" id="bMotion" ${B.animations !== false ? "checked" : ""}> Animations (transitions, effets au clic) — coupées d'office si le système de l'utilisateur demande moins d'animations</label>
     <label>Couleur d'accent</label>${swatchesHtml("bAccent", B.accent_color)}
     <label>Couleur de fond (en-têtes, voile sur les images, menus)</label>${swatchesHtml("bBase", B.base_color, BASES)}
     <div class="row-inline">
@@ -918,6 +956,7 @@ ADMIN_TABS.settings = async function () {
     branding: { portal_name: $("#bName").value.trim(), logo_url: $("#bLogo").value.trim(), show_name: $("#bShow").checked,
       logo_plate: $("#bPlate").checked, accent_color: B2.accent_color, search_engine: $("#bSearch").value,
       base_color: B2.base_color, font_title: $("#bFontT").value, font_body: $("#bFontB").value,
+      animations: $("#bMotion").checked,
       dashboard_background: B2.dashboard_background || "", login_background: B2.login_background || "" },
     ldap: { ldap_enabled: $("#lEn").checked ? "1" : "0", ldap_server: $("#lSrv").value.trim(), ldap_port: $("#lPort").value,
       ldap_use_ssl: $("#lSsl").checked ? "1" : "0", ldap_base_dn: $("#lBase").value.trim(), ldap_search_filter: $("#lFilter").value.trim(),

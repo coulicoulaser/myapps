@@ -197,7 +197,7 @@ def _save_branding(db: Session, b: dict) -> None:
             if b[k] not in FONTS:
                 raise HTTPException(400, "Police non proposée")
             set_setting(db, k, b[k])
-    for k in ("show_name", "logo_plate"):
+    for k in ("show_name", "logo_plate", "animations"):
         if k in b:
             set_setting(db, k, "1" if b[k] in (True, "1", 1, "true") else "0")
     if "search_engine" in b:

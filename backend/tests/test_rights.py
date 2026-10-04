@@ -116,3 +116,10 @@ def test_fond_et_polices(client, admin_auth):
     b = client.get("/api/auth/branding").json()
     assert (b["base_color"], b["font_title"], b["font_body"]) == ("#000038", "Space Grotesk", "Albert Sans")
     client.put("/api/settings", headers=admin_auth, json={"branding": {"font_title": "system", "font_body": "system"}})
+
+
+def test_animations_desactivables(client, admin_auth):
+    assert client.get("/api/auth/branding").json()["animations"] is True
+    client.put("/api/settings", headers=admin_auth, json={"branding": {"animations": False}})
+    assert client.get("/api/auth/branding").json()["animations"] is False
+    client.put("/api/settings", headers=admin_auth, json={"branding": {"animations": True}})

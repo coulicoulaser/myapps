@@ -3,6 +3,16 @@
 Toutes les évolutions notables sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/), versionnage [SemVer](https://semver.org/lang/fr/) (MAJOR.MINOR.PATCH).
 
+## [1.3.0] — 2026-10-04
+### Ajouté
+- **Animations façon Flutter / Material 3** : effet d'encre au clic sur tuiles, boutons,
+  onglets et menus ; tuiles qui apparaissent en cascade avec un léger rebond ; pastille
+  d'onglet qui glisse d'un dashboard à l'autre ; fondu enchaîné au changement de dashboard ;
+  glissement entre portail et administration et entre les étapes de l'assistant ; boîte de
+  dialogue, menus et notifications animés à l'ouverture et à la fermeture.
+- Réglage « Animations » (Réglages › Identité) pour les couper ; elles le sont d'office quand
+  le système de l'utilisateur demande moins d'animations.
+
 ## [1.2.0] — 2026-10-04
 ### Ajouté
 - **Couleur de fond** réglable (en-têtes, voile sur les images, menus), en plus de la couleur

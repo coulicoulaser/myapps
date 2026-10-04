@@ -30,9 +30,53 @@ async function api(path, opts = {}) {
 }
 
 function toast(msg) {
-  const t = $("#toast"); t.textContent = msg; t.classList.remove("hidden");
-  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.add("hidden"), 2800);
+  const t = $("#toast"); t.textContent = msg; t.classList.remove("hidden", "out");
+  void t.offsetWidth;                                   // relance l'entrée si un message est déjà affiché
+  clearTimeout(toast._t); clearTimeout(toast._h);
+  toast._t = setTimeout(() => { t.classList.add("out"); toast._h = setTimeout(() => t.classList.add("hidden"), 170); }, 2800);
 }
+
+// ---------- Mouvement ----------
+const reducedMotion = () => document.documentElement.classList.contains("no-motion") ||
+  window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+// Transition animée entre deux états de l'interface (View Transitions, navigateurs récents).
+// `kind` choisit l'animation dans style.css : dash (fondu enchaîné), fwd / back (glissement).
+// `update` doit modifier le DOM de façon synchrone. Sans prise en charge : mise à jour directe.
+function withTransition(kind, update) {
+  if (!document.startViewTransition || reducedMotion()) { update(); return false; }
+  const html = document.documentElement;
+  html.dataset.vt = kind;
+  try {
+    const vt = document.startViewTransition(update);
+    vt.finished.finally(() => { if (html.dataset.vt === kind) delete html.dataset.vt; });
+    return true;
+  } catch { delete html.dataset.vt; update(); return false; }
+}
+
+// Encre (InkWell) : une onde part du point touché, sur les éléments cliquables.
+const INK_SEL = ".tile, .btn-accent, .btn-ghost, .icon-btn, .tabs a, .admin-nav a, .chip, .bg-opt, .user-btn, .edit-toggle, " +
+  ".upd-pill, .search-item, .user-drop a, .login-submit, .sso-btn, .radio-list label, .city-results button";
+document.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0 || reducedMotion()) return;
+  const host = e.target.closest(INK_SEL);
+  if (!host || host.disabled) return;
+  host.classList.add("ink-host");
+  let layer = host.querySelector(":scope > .ink");
+  if (!layer) { layer = document.createElement("span"); layer.className = "ink"; host.prepend(layer); }
+  const r = host.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  const radius = Math.hypot(Math.max(x, r.width - x), Math.max(y, r.height - y));
+  const wave = document.createElement("span");
+  wave.style.cssText = `width:${radius * 2}px;height:${radius * 2}px;left:${x - radius}px;top:${y - radius}px`;
+  layer.appendChild(wave);
+  const release = () => {
+    wave.classList.add("out");
+    setTimeout(() => wave.remove(), 520);
+    ["pointerup", "pointercancel", "pointerleave"].forEach((t) => host.removeEventListener(t, release));
+  };
+  ["pointerup", "pointercancel", "pointerleave"].forEach((t) => host.addEventListener(t, release));
+}, { passive: true });
 
 async function uploadImage(file) {
   const fd = new FormData(); fd.append("file", file);
@@ -102,6 +146,7 @@ function applyBranding(b) {
   root.setProperty("--base-rgb", hexToRgb(base).join(", "));
   root.setProperty("--bg", "rgb(" + hexToRgb(base).map((v) => Math.round(v * 0.7)).join(", ") + ")");
   applyFonts(b.font_title, b.font_body);
+  document.documentElement.classList.toggle("no-motion", b.animations === false);
   document.title = b.portal_name || "MyApps";
   $("#favicon").href = faviconUrl(b);
   $$(".brand-slot").forEach((el) => (el.innerHTML = lockupHtml(b)));

@@ -157,6 +157,7 @@ def get_branding_config(db: Session) -> dict:
         "logo_url": g("logo_url", "") or "",
         "show_name": _as_bool(g("show_name", "1")),
         "logo_plate": _as_bool(g("logo_plate", "0")),
+        "animations": _as_bool(g("animations", "1")),
         "accent_color": g("accent_color", DEFAULT_ACCENT) or DEFAULT_ACCENT,
         "base_color": g("base_color", DEFAULT_BASE) or DEFAULT_BASE,
         "font_title": _font(g("font_title")),

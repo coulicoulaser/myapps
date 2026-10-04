@@ -14,10 +14,24 @@ par **sections**, visibles selon les **groupes** de chaque utilisateur. Thème s
 
 ## Installation (Debian 12+ / Ubuntu 22.04+)
 
-Copier le dossier (ou l'archive `dist/myapps-x.y.z.tar.gz`) sur la machine, puis :
+En root (ou chaque commande précédée de `sudo`).
+
+**1. Outils de base** (absents d'une installation minimale) :
 
 ```bash
-sudo ./install.sh
+apt update && apt install -y curl ca-certificates python3
+```
+
+**2. Dernière version publiée** sur [GitHub](https://github.com/coulicoulaser/myapps/releases/latest) :
+
+```bash
+cd /root && V=$(curl -fsSL https://github.com/coulicoulaser/myapps/releases/latest/download/latest.json | python3 -c 'import sys,json; print(json.load(sys.stdin)["version"])') && curl -fsSLO "https://github.com/coulicoulaser/myapps/releases/download/v$V/myapps-$V.tar.gz" && tar xzf "myapps-$V.tar.gz" && cd "myapps-$V" && echo "MyApps $V prêt"
+```
+
+**3. Installation** :
+
+```bash
+./install.sh
 ```
 
 Le script pose quelques questions (nom de domaine, HTTPS, port) puis installe tout :
@@ -26,7 +40,22 @@ dédié, environnement Python isolé, service systemd durci et synchro AD noctur
 
 À la fin, il affiche l'**adresse du portail** et un **code d'installation**. Ouvrez
 l'adresse : l'assistant demande ce code pour créer le compte administrateur, puis guide
-la personnalisation. Le code est détruit dès que l'administrateur existe.
+la personnalisation. Le code est détruit dès que l'administrateur existe. Pour le relire :
+
+```bash
+cat /var/lib/myapps/setup-code
+```
+
+Vérification facultative de l'archive (avant l'étape 3, depuis le dossier `/root`) : la
+signature du manifeste avec [minisign](https://jedisct1.github.io/minisign/), puis l'empreinte
+de l'archive annoncée par ce manifeste.
+
+```bash
+cd /root && apt install -y minisign && curl -fsSLO "https://github.com/coulicoulaser/myapps/releases/download/v$V/latest.json" && curl -fsSLO "https://github.com/coulicoulaser/myapps/releases/download/v$V/latest.json.minisig" && minisign -Vm latest.json -P RWRtWaBBR3FR4OBdnpa1rvB1EfROdVWF0rGZi0HYPVfiKVb/P1rh0biX && python3 -c "import json,hashlib; m=json.load(open('latest.json')); print('Archive conforme' if hashlib.sha256(open('myapps-$V.tar.gz','rb').read()).hexdigest()==m['archive']['sha256'] else 'ARCHIVE NON CONFORME')"
+```
+
+Sans accès Internet depuis la machine : télécharger l'archive `myapps-x.y.z.tar.gz` depuis
+la page des versions, la copier sur la machine, la décompresser et lancer `./install.sh`.
 
 ### Sans questions
 

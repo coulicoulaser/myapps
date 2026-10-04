@@ -320,3 +320,40 @@ def test_refus_efface_la_version_annoncee(client, admin_auth, server):
     st = client.post("/api/update/check", headers=admin_auth).json()["status"]
     assert st["available"] is False and st["latest"] is None and "signature" in st["error"]
     assert client.get("/api/update/status", headers=admin_auth).json()["status"]["available"] is False
+
+
+class _Redirector(http.server.BaseHTTPRequestHandler):
+    target = ""
+
+    def do_HEAD(self):
+        self.send_response(302)
+        self.send_header("Location", self.target)
+        self.end_headers()
+
+    def log_message(self, *a, **k):
+        pass
+
+
+def test_premier_saut_de_redirection():
+    _Redirector.target = "https://github.com/x/y/releases/download/v9.9.9/latest.json"
+    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Redirector)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        assert updater.first_redirect(f"http://127.0.0.1:{httpd.server_port}/latest.json") == _Redirector.target
+    finally:
+        httpd.shutdown()
+
+
+def test_stable_lit_manifeste_et_signature_dans_la_meme_version(monkeypatch):
+    """Régression 1.3.0 : le cache GitHub redirigeait latest.json vers la 1.2.0 et sa
+    signature vers la 1.3.0 → signature refusée juste après la publication."""
+    monkeypatch.setattr(config, "UPDATE_MANIFEST_URL", "")
+    monkeypatch.setattr(config, "UPDATE_REPO", "acme/myapps")
+    monkeypatch.setattr(updater, "first_redirect",
+                        lambda url: "https://github.com/acme/myapps/releases/download/v1.3.0/latest.json")
+    m, s = updater.manifest_urls("stable")
+    assert m == "https://github.com/acme/myapps/releases/download/v1.3.0/latest.json"
+    assert s == m + ".minisig"
+    monkeypatch.setattr(updater, "first_redirect", lambda url: "https://evil.example/latest.json")
+    with pytest.raises(updater.UpdateError, match="redirection inattendue"):
+        updater.manifest_urls("stable")

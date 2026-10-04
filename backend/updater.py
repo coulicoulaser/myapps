@@ -201,6 +201,31 @@ def http_get(url: str, limit: int, accept: str = "*/*") -> bytes:
     return data
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def first_redirect(url: str) -> str:
+    """Adresse vers laquelle `url` redirige (premier saut seulement)."""
+    scheme = urllib.parse.urlparse(url).scheme
+    if scheme != "https" and not (scheme == "http" and _is_local(url)):
+        raise UpdateError(f"URL refusée (HTTPS requis) : {url}")
+    opener = urllib.request.build_opener(_NoRedirect)
+    req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": f"MyApps-updater/{current_version()}"})
+    try:
+        opener.open(req, timeout=30)
+    except urllib.error.HTTPError as e:
+        if e.code in (301, 302, 303, 307, 308) and e.headers.get("Location"):
+            return urllib.parse.urljoin(url, e.headers["Location"])
+        if e.code == 404:
+            raise UpdateError(f"aucune version publiée pour l'instant ({url} introuvable)")
+        raise UpdateError(f"téléchargement impossible ({url}) : HTTP {e.code}")
+    except Exception as e:
+        raise UpdateError(f"téléchargement impossible ({url}) : {e}")
+    raise UpdateError(f"pas de redirection pour {url}")
+
+
 def trusted_public_key() -> str:
     if config.UPDATE_PUBKEY:
         return config.UPDATE_PUBKEY
@@ -218,8 +243,14 @@ def manifest_urls(channel: str) -> tuple[str, str]:
     repo = config.UPDATE_REPO
     if channel == "stable":
         # Redirection GitHub vers la dernière version finale publiée : ni API ni quota.
-        base = f"https://github.com/{repo}/releases/latest/download/"
-        return base + "latest.json", base + "latest.json.minisig"
+        # On ne suit que le premier saut (…/latest/… → …/download/vX.Y.Z/…) et on lit les deux
+        # fichiers dans ce même dossier : juste après une publication, le cache de GitHub peut
+        # rediriger latest.json et latest.json.minisig vers deux versions différentes.
+        tag_url = first_redirect(f"https://github.com/{repo}/releases/latest/download/latest.json")
+        prefix = f"https://github.com/{repo}/releases/download/"
+        if not (tag_url.startswith(prefix) and tag_url.endswith("/latest.json")):
+            raise UpdateError(f"redirection inattendue de GitHub : {tag_url}")
+        return tag_url, tag_url + ".minisig"
     # Bêta : la version la plus récente, pré-versions comprises (API GitHub, 60 req/h/IP).
     raw = http_get(f"https://api.github.com/repos/{repo}/releases?per_page=30", 2 * 1024 * 1024,
                    accept="application/vnd.github+json")

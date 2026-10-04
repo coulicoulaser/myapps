@@ -3,6 +3,14 @@
 Toutes les évolutions notables sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/), versionnage [SemVer](https://semver.org/lang/fr/) (MAJOR.MINOR.PATCH).
 
+## [1.3.1] — 2026-10-04
+### Corrigé
+- **« Signature invalide » juste après une publication** : la recherche de mise à jour lisait
+  le manifeste et sa signature par deux redirections « dernière version » de GitHub, que son
+  cache pouvait faire pointer vers deux versions différentes pendant quelques minutes. Les deux
+  fichiers sont maintenant lus dans le dossier d'une même version. La vérification de
+  signature, elle, a bien fait son travail : rien d'incohérent n'a été installé.
+
 ## [1.3.0] — 2026-10-04
 ### Ajouté
 - **Animations façon Flutter / Material 3** : effet d'encre au clic sur tuiles, boutons,

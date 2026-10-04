@@ -13,7 +13,7 @@ from database import get_session
 from models import (DashboardAccess, Group, GroupMembership, Site, User,
                     UserAppOverride, UserDashboardOverride)
 from rights import user_group_ids
-from security import (MIN_PASSWORD_LENGTH, SEARCH_ENGINES, _service_conn, apply_ad_identity,
+from security import (FONTS, MIN_PASSWORD_LENGTH, SEARCH_ENGINES, _service_conn, apply_ad_identity,
                       authenticate_user, clean_color, clean_image_url, create_token,
                       current_user, get_branding_config, get_ldap_config, get_sso_config,
                       hash_password, ldap_all_groups, ldap_fetch_user, ldap_group_members,
@@ -189,8 +189,14 @@ def _save_branding(db: Session, b: dict) -> None:
     for k in BRANDING_IMAGE_KEYS:
         if k in b:
             set_setting(db, k, clean_image_url(b[k], k) or "")
-    if "accent_color" in b:
-        set_setting(db, "accent_color", clean_color(b["accent_color"]) or "")
+    for k in ("accent_color", "base_color"):
+        if k in b:
+            set_setting(db, k, clean_color(b[k]) or "")
+    for k in ("font_title", "font_body"):
+        if k in b:
+            if b[k] not in FONTS:
+                raise HTTPException(400, "Police non proposée")
+            set_setting(db, k, b[k])
     for k in ("show_name", "logo_plate"):
         if k in b:
             set_setting(db, k, "1" if b[k] in (True, "1", 1, "true") else "0")

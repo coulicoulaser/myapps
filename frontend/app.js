@@ -857,6 +857,12 @@ ADMIN_TABS.settings = async function () {
       <label class="check"><input type="checkbox" id="bPlate" ${B.logo_plate ? "checked" : ""}> Pastille blanche derrière le logo</label>
     </div>
     <label>Couleur d'accent</label>${swatchesHtml("bAccent", B.accent_color)}
+    <label>Couleur de fond (en-têtes, voile sur les images, menus)</label>${swatchesHtml("bBase", B.base_color, BASES)}
+    <div class="row-inline">
+      <div><label>Police des titres</label>${fontSelectHtml("bFontT", B.font_title)}</div>
+      <div><label>Police du texte</label>${fontSelectHtml("bFontB", B.font_body)}</div>
+    </div>
+    <p class="muted" style="margin-top:.3rem">Une police autre que celle du système est chargée depuis Google Fonts par le navigateur de chaque utilisateur.</p>
     <label>Recherche web</label>
     <select id="bSearch">${[["google", "Google"], ["duckduckgo", "DuckDuckGo"], ["bing", "Bing"], ["qwant", "Qwant"], ["none", "Aucune"]]
       .map(([k, l]) => `<option value="${k}" ${B.search_engine === k ? "selected" : ""}>${l}</option>`).join("")}</select>
@@ -902,6 +908,7 @@ ADMIN_TABS.settings = async function () {
   bindImagePicker("bLogo");
   $("#bPlate").onchange = syncPlate;
   bindSwatches("bAccent", (c) => (B2.accent_color = c));
+  bindSwatches("bBase", (c) => (B2.base_color = c));
   bindBgGrid("bDashGrid", (u) => { B2.dashboard_background = u; $("#bDash").value = ""; $("#bDashPrev").style.backgroundImage = ""; });
   bindImagePicker("bDash", (u) => { if (u) { B2.dashboard_background = u; markBgGrid("bDashGrid", u); } });
   bindBgGrid("bLoginGrid", (u) => { B2.login_background = u; $("#bLogin").value = ""; $("#bLoginPrev").style.backgroundImage = ""; });
@@ -910,6 +917,7 @@ ADMIN_TABS.settings = async function () {
   const payload = () => ({
     branding: { portal_name: $("#bName").value.trim(), logo_url: $("#bLogo").value.trim(), show_name: $("#bShow").checked,
       logo_plate: $("#bPlate").checked, accent_color: B2.accent_color, search_engine: $("#bSearch").value,
+      base_color: B2.base_color, font_title: $("#bFontT").value, font_body: $("#bFontB").value,
       dashboard_background: B2.dashboard_background || "", login_background: B2.login_background || "" },
     ldap: { ldap_enabled: $("#lEn").checked ? "1" : "0", ldap_server: $("#lSrv").value.trim(), ldap_port: $("#lPort").value,
       ldap_use_ssl: $("#lSsl").checked ? "1" : "0", ldap_base_dn: $("#lBase").value.trim(), ldap_search_filter: $("#lFilter").value.trim(),

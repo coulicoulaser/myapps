@@ -3,7 +3,18 @@
 Toutes les évolutions notables sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/), versionnage [SemVer](https://semver.org/lang/fr/) (MAJOR.MINOR.PATCH).
 
-## [Non publié]
+## [1.2.0] — 2026-10-04
+### Ajouté
+- **Couleur de fond** réglable (en-têtes, voile sur les images, menus), en plus de la couleur
+  d'accent : Réglages › Identité et assistant de premier démarrage.
+- **Polices** au choix pour les titres et le texte (15 polices Google Fonts, ou police du
+  système par défaut, sans aucun appel externe).
+- `install.sh --listen ADRESSE` : écoute sur une adresse choisie sans nginx géré par le
+  script (derrière un reverse proxy existant).
+- `install.sh --adopt` : reprend un service systemd homonyme installé autrement (ancien
+  MyApps…) ; ses fichiers sont sauvegardés dans `/etc/<nom>/adopted-<date>/` et son
+  `JWT_SECRET` est repris pour garder les sessions ouvertes.
+
 ### Corrigé
 - `scripts/sign-release.py` sans argument affichait une erreur au lieu de l'aide (vérification
   statique de la CI en échec). Sans effet sur les installations.

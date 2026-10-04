@@ -105,3 +105,14 @@ def test_slug_dashboard_unique(client, admin_auth):
     _mk(client, admin_auth, "/api/dashboards", {"name": "Équipe RH", "slug": ""})
     r = client.post("/api/dashboards", headers=admin_auth, json={"name": "Equipe RH", "slug": ""})
     assert r.status_code == 400
+
+
+def test_fond_et_polices(client, admin_auth):
+    for b in ({"base_color": "navy"}, {"font_title": "Comic Sans MS"}, {"font_body": "../../x"}):
+        assert client.put("/api/settings", headers=admin_auth, json={"branding": b}).status_code == 400, b
+    r = client.put("/api/settings", headers=admin_auth, json={"branding": {
+        "base_color": "#000038", "font_title": "Space Grotesk", "font_body": "Albert Sans"}})
+    assert r.status_code == 200
+    b = client.get("/api/auth/branding").json()
+    assert (b["base_color"], b["font_title"], b["font_body"]) == ("#000038", "Space Grotesk", "Albert Sans")
+    client.put("/api/settings", headers=admin_auth, json={"branding": {"font_title": "system", "font_body": "system"}})

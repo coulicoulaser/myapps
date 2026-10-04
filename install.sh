@@ -30,6 +30,8 @@ EMAIL=""
 ASSUME_YES=0
 PORT_SET=0
 UPDATE=0
+ADOPT=0
+LISTEN=""
 
 c_info="\033[1;34m"; c_ok="\033[1;32m"; c_warn="\033[1;33m"; c_err="\033[1;31m"; c_off="\033[0m"
 [[ -t 1 ]] || { c_info=""; c_ok=""; c_warn=""; c_err=""; c_off=""; }
@@ -57,6 +59,13 @@ Usage : sudo $0 [options]
                       Permet plusieurs installations sur la même machine.
   --dir DOSSIER       Dossier du code (défaut /opt/<nom>).
   --data DOSSIER      Dossier des données (défaut /var/lib/<nom>).
+  --listen ADRESSE    Adresse d'écoute sans nginx géré par le script (ex. 127.0.0.1
+                      derrière un reverse proxy existant). Défaut : 0.0.0.0, ou
+                      127.0.0.1 avec --domain.
+  --adopt             Reprend un service systemd homonyme non créé par ce script
+                      (ancien MyApps…) : ses fichiers sont sauvegardés dans
+                      /etc/<nom>/adopted-<date>/ puis retirés, son JWT_SECRET est
+                      repris (sessions conservées). Les données ne sont pas importées.
   --update            Mise à jour d'une installation existante avec ses options
                       d'origine (utilisé par le service de mise à jour).
   -y, --yes           Aucune question (valeurs par défaut + options fournies).
@@ -79,6 +88,8 @@ while [[ $# -gt 0 ]]; do
     --name)   SVC="${2:-}"; shift 2 ;;
     --dir)    INSTALL_DIR="${2:-}"; shift 2 ;;
     --data)   DATA_DIR="${2:-}"; shift 2 ;;
+    --listen) LISTEN="${2:-}"; shift 2 ;;
+    --adopt)  ADOPT=1; shift ;;
     --update) UPDATE=1; ASSUME_YES=1; shift ;;
     -y|--yes) ASSUME_YES=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -112,7 +123,7 @@ if [[ $UPDATE -eq 1 ]]; then
     while IFS='=' read -r k v; do
       case "$k" in
         PORT) PORT="$v" ;; DOMAIN) DOMAIN="$v" ;; HTTPS) HTTPS="$v" ;; EMAIL) EMAIL="$v" ;;
-        INSTALL_DIR) INSTALL_DIR="$v" ;; DATA_DIR) DATA_DIR="$v" ;;
+        INSTALL_DIR) INSTALL_DIR="$v" ;; DATA_DIR) DATA_DIR="$v" ;; LISTEN) LISTEN="$v" ;;
       esac
     done < <(grep -E '^[A-Z_]+=' "$INSTALL_CONF")
   else
@@ -169,6 +180,8 @@ fi
 [[ "$HTTPS" =~ ^[01]$ ]] || die "valeur HTTPS invalide : $HTTPS"
 [[ $HTTPS -eq 0 || -n "$DOMAIN" ]] || die "--https nécessite --domain."
 [[ "$EMAIL" =~ ^[^[:space:]\"\']*$ ]] || die "--email invalide."
+[[ -z "$LISTEN" || "$LISTEN" =~ ^[0-9a-fA-F.:]+$ ]] || die "--listen : adresse IP attendue (ex. 127.0.0.1)."
+[[ -z "$LISTEN" || -z "$DOMAIN" ]] || die "--listen et --domain sont incompatibles (avec --domain, nginx écoute et l'application reste sur 127.0.0.1)."
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/$SVC}"
 DATA_DIR="${DATA_DIR:-/var/lib/$SVC}"
@@ -178,11 +191,34 @@ done
 RELEASES="$INSTALL_DIR/releases"
 CURRENT="$INSTALL_DIR/current"
 USE_NGINX=0; [[ -n "$DOMAIN" ]] && USE_NGINX=1
-BIND="0.0.0.0"; [[ $USE_NGINX -eq 1 ]] && BIND="127.0.0.1"
+BIND="${LISTEN:-0.0.0.0}"; [[ $USE_NGINX -eq 1 ]] && BIND="127.0.0.1"
 
-# Ne jamais écraser un service homonyme qui n'a pas été créé par ce script.
+# Ne jamais écraser un service homonyme qui n'a pas été créé par ce script, sauf --adopt.
+ADOPT_SECRET=""
 if [[ -f "$UNIT" ]] && ! grep -qF "$MARKER" "$UNIT"; then
-  die "un service « $SVC » existe déjà et n'a pas été installé par ce script. Choisissez un autre nom : --name autre-nom"
+  [[ $ADOPT -eq 1 ]] || die "un service « $SVC » existe déjà et n'a pas été installé par ce script. Choisissez un autre nom (--name autre-nom), ou reprenez-le avec --adopt."
+  step "Reprise du service existant « $SVC »"
+  ADOPT_DIR="$CONF_DIR/adopted-$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$ADOPT_DIR"; chmod 700 "$ADOPT_DIR"
+  # Secret JWT de l'ancien service : les sessions ouvertes restent valides.
+  while read -r ef; do
+    ef="${ef#-}"
+    [[ -f "$ef" ]] || continue
+    sec="$(sed -n 's/^JWT_SECRET=//p' "$ef" | head -1)"; sec="${sec%\"}"; sec="${sec#\"}"; sec="${sec%\'}"; sec="${sec#\'}"
+    [[ ${#sec} -ge 32 ]] && ADOPT_SECRET="$sec"
+  done < <(sed -n 's/^EnvironmentFile=//p' "$UNIT")
+  systemctl disable --now "$SVC.service" 2>/dev/null || true
+  for t in "$SVC-adsync.timer" "$SVC-update.timer" "$SVC-update.path"; do
+    f="/etc/systemd/system/$t"
+    if [[ -f "$f" ]] && ! grep -qF "$MARKER" "$f"; then systemctl disable --now "$t" 2>/dev/null || true; fi
+  done
+  for f in "$UNIT" "$UNIT.d" /etc/systemd/system/"$SVC"-*.service /etc/systemd/system/"$SVC"-*.timer /etc/systemd/system/"$SVC"-*.path; do
+    [[ -e "$f" ]] || continue
+    if [[ -d "$f" ]] || ! grep -qF "$MARKER" "$f"; then mv "$f" "$ADOPT_DIR/"; fi
+  done
+  systemctl daemon-reload
+  ok "ancien service arrêté, fichiers sauvegardés dans $ADOPT_DIR"
+  [[ -n "$ADOPT_SECRET" ]] && ok "JWT_SECRET repris (sessions conservées)" || warn "JWT_SECRET de l'ancien service introuvable : nouveau secret, reconnexion nécessaire"
 fi
 UPGRADE=0; [[ -f "$UNIT" ]] && UPGRADE=1
 
@@ -198,7 +234,7 @@ echo "  Service   : $SVC $( [[ $UPGRADE -eq 1 ]] && echo '(mise à jour)' || ech
 echo "  Version   : $VERSION"
 echo "  Code      : $INSTALL_DIR"
 echo "  Données   : $DATA_DIR"
-echo "  Accès     : $( [[ $USE_NGINX -eq 1 ]] && echo "http$( [[ $HTTPS -eq 1 ]] && echo s)://$DOMAIN (nginx → 127.0.0.1:$PORT)" || echo "http://<ip>:$PORT")"
+echo "  Accès     : $( [[ $USE_NGINX -eq 1 ]] && echo "http$( [[ $HTTPS -eq 1 ]] && echo s)://$DOMAIN (nginx → 127.0.0.1:$PORT)" || echo "http://$BIND:$PORT")"
 if [[ $ASSUME_YES -eq 0 && -t 0 ]]; then ask_yn "Continuer" "o" || die "annulé."; fi
 
 # --- paquets système ----------------------------------------------------------
@@ -307,6 +343,7 @@ if [[ -f "$ENV_FILE" ]]; then
   JWT_SECRET="$(sed -n 's/^JWT_SECRET=//p' "$ENV_FILE" | head -1)"
   EXTRA="$(grep -E '^MYAPPS_UPDATE_(REPO|MANIFEST_URL|PUBKEY)=' "$ENV_FILE" || true)"   # surcharges conservées
 fi
+[[ ${#JWT_SECRET} -ge 32 ]] || JWT_SECRET="$ADOPT_SECRET"
 [[ ${#JWT_SECRET} -ge 32 ]] || JWT_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
 cat > "$ENV_FILE" <<EOF
 $MARKER — relancer install.sh réécrit ce fichier (JWT_SECRET est conservé).
@@ -330,6 +367,7 @@ HTTPS=$HTTPS
 EMAIL=$EMAIL
 INSTALL_DIR=$INSTALL_DIR
 DATA_DIR=$DATA_DIR
+LISTEN=$LISTEN
 EOF
 chown root:"$SVC" "$CONF_DIR" "$ENV_FILE"
 chmod 750 "$CONF_DIR"; chmod 640 "$ENV_FILE"; chmod 600 "$INSTALL_CONF"
@@ -338,7 +376,7 @@ ok "$ENV_FILE"
 # --- services systemd -----------------------------------------------------------
 step "Services systemd"
 PROXY_OPTS=""
-[[ $USE_NGINX -eq 1 ]] && PROXY_OPTS=" --proxy-headers --forwarded-allow-ips 127.0.0.1"
+[[ "$BIND" == "127.0.0.1" ]] && PROXY_OPTS=" --proxy-headers --forwarded-allow-ips 127.0.0.1"
 cat > "$UNIT" <<EOF
 $MARKER
 [Unit]
@@ -504,7 +542,7 @@ fi
 
 # Ménage : on garde la version active et les plus récentes (retour arrière manuel possible).
 mapfile -t OLD < <(find "$RELEASES" -mindepth 1 -maxdepth 1 -type d ! -name '.*' -printf '%T@ %p\n' \
-                   | sort -rn | cut -d' ' -f2- | grep -vxF "$REL" | tail -n +"$KEEP_RELEASES")
+                   | sort -rn | cut -d' ' -f2- | { grep -vxF "$REL" || true; } | tail -n +"$KEEP_RELEASES")
 for d in "${OLD[@]}"; do rm -rf "$d"; done
 [[ ${#OLD[@]} -gt 0 ]] && ok "${#OLD[@]} ancienne(s) version(s) supprimée(s)"
 
@@ -572,6 +610,7 @@ if [[ $USE_NGINX -eq 1 ]]; then
   URL="http$( [[ $HTTPS -eq 1 ]] && echo s)://$DOMAIN"
 else
   IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  [[ "$BIND" != "0.0.0.0" ]] && IP="$BIND"
   URL="http://${IP:-<ip-de-la-machine>}:$PORT"
 fi
 

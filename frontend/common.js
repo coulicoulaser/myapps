@@ -93,16 +93,40 @@ function faviconUrl(b) {
 
 function applyBranding(b) {
   state.branding = b = { ...state.branding, ...(b || {}) };
-  const accent = b.accent_color || "#3b82f6";
+  const accent = b.accent_color || "#3b82f6", base = b.base_color || "#0b1020";
   const root = document.documentElement.style;
   root.setProperty("--accent", accent);
   root.setProperty("--accent-rgb", hexToRgb(accent).join(", "));
   root.setProperty("--on-accent", onAccent(accent));
+  root.setProperty("--base", base);
+  root.setProperty("--base-rgb", hexToRgb(base).join(", "));
+  root.setProperty("--bg", "rgb(" + hexToRgb(base).map((v) => Math.round(v * 0.7)).join(", ") + ")");
+  applyFonts(b.font_title, b.font_body);
   document.title = b.portal_name || "MyApps";
   $("#favicon").href = faviconUrl(b);
   $$(".brand-slot").forEach((el) => (el.innerHTML = lockupHtml(b)));
   const si = $("#searchInput");
   if (si) si.placeholder = b.search_engine_name ? `Rechercher une application ou sur ${b.search_engine_name}…` : "Rechercher une application…";
+}
+
+// Polices : « system » n'appelle rien ; sinon feuille Google Fonts chargée par le navigateur.
+const SYSTEM_STACK = '"Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif';
+const FONTS = ["system", "Inter", "Roboto", "Open Sans", "Lato", "Montserrat", "Poppins", "Nunito",
+  "Work Sans", "Source Sans 3", "DM Sans", "Manrope", "IBM Plex Sans", "Space Grotesk", "Albert Sans"];
+function applyFonts(title, body) {
+  const root = document.documentElement.style;
+  const fam = (f) => (f && f !== "system" ? `"${f}", ` : '"Inter", ') + SYSTEM_STACK;
+  root.setProperty("--font-title", fam(title));
+  root.setProperty("--font-body", fam(body));
+  const wanted = [...new Set([title, body].filter((f) => f && f !== "system" && FONTS.includes(f)))];
+  let link = $("#brandFonts");
+  if (!wanted.length) { link?.remove(); return; }
+  const href = "https://fonts.googleapis.com/css2?" + wanted.map((f) => "family=" + f.replace(/ /g, "+") + ":wght@300;400;500;600;700").join("&") + "&display=swap";
+  if (!link) { link = document.createElement("link"); link.id = "brandFonts"; link.rel = "stylesheet"; document.head.appendChild(link); }
+  if (link.href !== href) link.href = href;
+}
+function fontSelectHtml(id, value) {
+  return `<select id="${id}">${FONTS.map((f) => `<option value="${f}" ${f === (value || "system") ? "selected" : ""}>${f === "system" ? "Police du système (aucun appel externe)" : esc(f)}</option>`).join("")}</select>`;
 }
 
 // ---------- Fonds proposés ----------
@@ -114,6 +138,7 @@ const BACKGROUNDS = [
   { url: "/backgrounds/crepuscule.svg", name: "Crépuscule" },
   { url: "/backgrounds/graphite.svg", name: "Graphite" },
 ];
+const BASES = ["#0b1020", "#000038", "#0f172a", "#111111", "#1a1033", "#062019", "#1f1414"];
 const ACCENTS = ["#3b82f6", "#6366f1", "#8b5cf6", "#ec4899", "#ef4444", "#f97316", "#eab308", "#22c55e", "#10b981", "#06b6d4"];
 
 // ---------- Widget : choix d'image (URL, envoi de fichier, aperçu) ----------
@@ -162,11 +187,11 @@ function markBgGrid(id, value) {
 }
 
 // ---------- Widget : couleur d'accent ----------
-function swatchesHtml(id, value) {
+function swatchesHtml(id, value, palette = ACCENTS) {
   const v = (value || "").toLowerCase();
   return `<div class="swatches" id="${id}">
-    ${ACCENTS.map((c) => `<button type="button" class="swatch${v === c ? " on" : ""}" data-c="${c}" style="background:${c}" title="${c}"></button>`).join("")}
-    <input type="color" id="${id}Custom" value="${esc(value || "#3b82f6")}" title="Couleur personnalisée">
+    ${palette.map((c) => `<button type="button" class="swatch${v === c ? " on" : ""}" data-c="${c}" style="background:${c}" title="${c}"></button>`).join("")}
+    <input type="color" id="${id}Custom" value="${esc(value || palette[0])}" title="Couleur personnalisée">
   </div>`;
 }
 function bindSwatches(id, onPick) {

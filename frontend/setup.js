@@ -168,6 +168,10 @@ const STEP_IDENTITY = {
       <label class="check"><input type="checkbox" id="wzPlate" ${b.logo_plate ? "checked" : ""}> Pastille blanche derrière le logo</label>
     </div>
     <label>Couleur d'accent</label>${swatchesHtml("wzAccent", b.accent_color)}
+    <div class="row-inline">
+      <div><label>Couleur de fond</label>${swatchesHtml("wzBase", b.base_color, BASES)}</div>
+      <div><label>Police</label>${fontSelectHtml("wzFont", b.font_title)}</div>
+    </div>
     <label>Recherche web dans la barre du haut</label>
     <select id="wzSearch">
       ${[["google", "Google"], ["duckduckgo", "DuckDuckGo"], ["bing", "Bing"], ["qwant", "Qwant"], ["none", "Aucune (applications seulement)"]]
@@ -190,6 +194,8 @@ const STEP_IDENTITY = {
     $("#wzShowName").onchange = live;
     $("#wzPlate").onchange = live;
     bindSwatches("wzAccent", (c) => { wz.branding.accent_color = c; live(); });
+    bindSwatches("wzBase", (c) => { wz.branding.base_color = c; live(); });
+    $("#wzFont").onchange = () => { wz.branding.font_title = wz.branding.font_body = $("#wzFont").value; live(); };
     $("#wzSearch").onchange = () => (wz.branding.search_engine = $("#wzSearch").value);
     live();
   },
@@ -198,6 +204,7 @@ const STEP_IDENTITY = {
     const r = await api("/api/settings", { method: "PUT", body: JSON.stringify({ branding: {
       portal_name: b.portal_name, logo_url: b.logo_url || "", show_name: b.show_name, logo_plate: b.logo_plate,
       accent_color: b.accent_color || "#3b82f6", search_engine: $("#wzSearch").value,
+      base_color: b.base_color || "#0b1020", font_title: b.font_title || "system", font_body: b.font_body || "system",
     } }) });
     applyBranding(r.branding);
     wz.branding = { ...r.branding };

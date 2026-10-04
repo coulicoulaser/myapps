@@ -44,11 +44,13 @@ sudo ./install.sh -y --domain portail.exemple.fr --https --email it@exemple.fr
 | `--https` | certificat Let's Encrypt + redirection HTTP → HTTPS | non |
 | `--email` | e-mail Let's Encrypt | aucun |
 | `--port N` | port de l'application | 8080 |
+| `--listen ADRESSE` | adresse d'écoute sans nginx géré (reverse proxy existant) | `0.0.0.0` |
+| `--adopt` | reprendre un service homonyme installé autrement (sauvegardé, secret JWT repris) | — |
 | `--name NOM` | nom du service et du compte système (plusieurs installations possibles) | `myapps` |
 | `--dir` / `--data` | dossiers du code / des données | `/opt/<nom>` / `/var/lib/<nom>` |
 | `-y` | aucune question | — |
 
-Le script refuse d'écraser un service ou un site nginx homonyme qu'il n'a pas créé.
+Le script refuse d'écraser un service ou un site nginx homonyme qu'il n'a pas créé (sauf `--adopt` pour un service).
 
 ### Emplacements
 

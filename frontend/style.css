@@ -7,6 +7,7 @@
   --on-accent: #ffffff;
   --base: #0b1020;
   --base-rgb: 11, 16, 32;
+  --bg: #070b16;
   --info: #38bdf8;
   --danger: #f472b6;
   --font-title: "Inter", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -21,7 +22,7 @@ body {
   font: 15px/1.5 var(--font-body);
   color: #fff;
   background: radial-gradient(ellipse at 20% 0%, rgba(var(--accent-rgb), .22), transparent 55%),
-              radial-gradient(ellipse at 100% 100%, rgba(var(--accent-rgb), .12), transparent 50%), #070b16;
+              radial-gradient(ellipse at 100% 100%, rgba(var(--accent-rgb), .12), transparent 50%), var(--bg);
   background-attachment: fixed;
   overflow-x: hidden;
 }
@@ -335,7 +336,7 @@ label.check { display: flex; align-items: center; gap: .5rem; font-size: .9rem; 
 .preview-bar { display: flex; align-items: center; gap: .8rem; padding: .7rem 1rem; border-radius: 14px; margin-top: 1.2rem; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); overflow: hidden; }
 .preview-bar .fake-search { flex: 1; height: 30px; border-radius: 999px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15); min-width: 40px; }
 .preview-bar .fake-btn { height: 30px; padding: 0 .9rem; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: .78rem; font-weight: 600; display: flex; align-items: center; white-space: nowrap; }
-.preview-dash { margin-top: .9rem; border-radius: 14px; aspect-ratio: 16 / 7; background: #070b16 center/cover no-repeat; position: relative; overflow: hidden; border: 1px solid rgba(255,255,255,.14); }
+.preview-dash { margin-top: .9rem; border-radius: 14px; aspect-ratio: 16 / 7; background: var(--bg) center/cover no-repeat; position: relative; overflow: hidden; border: 1px solid rgba(255,255,255,.14); }
 .preview-dash .pv-tiles { position: absolute; left: 6%; right: 6%; bottom: 14%; display: grid; grid-template-columns: repeat(6, 1fr); gap: 4%; }
 .preview-dash .pv-tiles i { aspect-ratio: 1; border-radius: 10px; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.2); backdrop-filter: blur(6px); }
 .preview-dash .pv-title { position: absolute; left: 6%; top: 14%; font-family: var(--font-title); font-weight: 700; font-size: 1.1rem; text-shadow: 0 2px 8px rgba(0,0,0,.5); }

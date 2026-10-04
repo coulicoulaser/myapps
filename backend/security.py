@@ -130,6 +130,10 @@ def _as_bool(v) -> bool:
 
 
 DEFAULT_ACCENT = "#3b82f6"
+DEFAULT_BASE = "#0b1020"
+# Polices proposées (Google Fonts, chargées par le navigateur) ; « system » = aucune requête externe.
+FONTS = ("system", "Inter", "Roboto", "Open Sans", "Lato", "Montserrat", "Poppins", "Nunito",
+         "Work Sans", "Source Sans 3", "DM Sans", "Manrope", "IBM Plex Sans", "Space Grotesk", "Albert Sans")
 SEARCH_ENGINES = {
     "google": ("Google", "https://www.google.com/search?q="),
     "duckduckgo": ("DuckDuckGo", "https://duckduckgo.com/?q="),
@@ -137,6 +141,10 @@ SEARCH_ENGINES = {
     "qwant": ("Qwant", "https://www.qwant.com/?q="),
     "none": ("", ""),
 }
+
+
+def _font(v) -> str:
+    return v if v in FONTS else "system"
 
 
 def get_branding_config(db: Session) -> dict:
@@ -150,6 +158,9 @@ def get_branding_config(db: Session) -> dict:
         "show_name": _as_bool(g("show_name", "1")),
         "logo_plate": _as_bool(g("logo_plate", "0")),
         "accent_color": g("accent_color", DEFAULT_ACCENT) or DEFAULT_ACCENT,
+        "base_color": g("base_color", DEFAULT_BASE) or DEFAULT_BASE,
+        "font_title": _font(g("font_title")),
+        "font_body": _font(g("font_body")),
         "login_background": g("login_background", "") or "",
         "dashboard_background": g("dashboard_background", "") or "",
         "search_engine": engine,

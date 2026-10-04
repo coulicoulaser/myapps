@@ -45,6 +45,9 @@ def main(argv):
         pub.write_text(public)
         print(f"Clé secrète : {key} (à garder hors du dépôt)\nClé publique : {pub}")
         return 0
+    if cmd not in ("sign", "verify"):
+        print(__doc__)
+        return 2
     target = Path(argv[2] if len(argv) > 2 else ROOT / "dist" / "latest.json")
     sig = target.with_name(target.name + ".minisig")
     data = target.read_bytes()
@@ -58,11 +61,8 @@ def main(argv):
             sys.exit(f"Signature refusée par backend/update_key.pub ({e}) : mauvaise clé ?")
         print(f"{sig} : signé et vérifié (myapps {version})")
         return 0
-    if cmd == "verify":
-        print("Signature valide :", signing.verify(data, sig.read_text(), PUB.read_text()))
-        return 0
-    print(__doc__)
-    return 2
+    print("Signature valide :", signing.verify(data, sig.read_text(), PUB.read_text()))
+    return 0
 
 
 if __name__ == "__main__":

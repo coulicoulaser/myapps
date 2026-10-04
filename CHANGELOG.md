@@ -3,6 +3,12 @@
 Toutes les évolutions notables sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/), versionnage [SemVer](https://semver.org/lang/fr/) (MAJOR.MINOR.PATCH).
 
+## [Non publié]
+### Corrigé
+- `scripts/sign-release.py` sans argument affichait une erreur au lieu de l'aide (vérification
+  statique de la CI en échec). Sans effet sur les installations.
+- Actions GitHub passées aux versions Node 24 (checkout v5, setup-python v6, setup-node v5).
+
 ## [1.1.0] — 2026-10-04
 ### Ajouté
 - **Mises à jour depuis GitHub** (Administration › Mises à jour). Chaque nuit, MyApps

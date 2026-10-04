@@ -3,6 +3,15 @@
 Toutes les évolutions notables sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/), versionnage [SemVer](https://semver.org/lang/fr/) (MAJOR.MINOR.PATCH).
 
+## [1.3.2] — 2026-10-04
+### Corrigé
+- **Flou qui sautait pendant les animations** (changement de dashboard, entrée dans
+  l'administration, étapes de l'assistant) : ces transitions passaient par l'API View
+  Transitions du navigateur, qui anime des captures figées où le flou des éléments « verre »
+  disparaît, puis revient d'un coup. Les vrais éléments sont maintenant animés directement
+  (déplacement seul pour ce qui contient du verre), le flou reste net d'un bout à l'autre et
+  l'entrée dans l'administration est fluide.
+
 ## [1.3.1] — 2026-10-04
 ### Corrigé
 - **« Signature invalide » juste après une publication** : la recherche de mise à jour lisait

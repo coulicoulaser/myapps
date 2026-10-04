@@ -40,18 +40,17 @@ function toast(msg) {
 const reducedMotion = () => document.documentElement.classList.contains("no-motion") ||
   window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-// Transition animée entre deux états de l'interface (View Transitions, navigateurs récents).
-// `kind` choisit l'animation dans style.css : dash (fondu enchaîné), fwd / back (glissement).
-// `update` doit modifier le DOM de façon synchrone. Sans prise en charge : mise à jour directe.
-function withTransition(kind, update) {
-  if (!document.startViewTransition || reducedMotion()) { update(); return false; }
+// Animation d'entrée d'un écran : `kind` = fwd (arrive de la droite) ou back (de la
+// gauche), lue par style.css via html[data-nav]. Le DOM est modifié aussitôt.
+function navigate(kind, update) {
   const html = document.documentElement;
-  html.dataset.vt = kind;
-  try {
-    const vt = document.startViewTransition(update);
-    vt.finished.finally(() => { if (html.dataset.vt === kind) delete html.dataset.vt; });
-    return true;
-  } catch { delete html.dataset.vt; update(); return false; }
+  clearTimeout(navigate._t);
+  delete html.dataset.nav;
+  update();
+  if (reducedMotion()) return;
+  void html.offsetWidth;                                // relance l'animation si déjà en cours
+  html.dataset.nav = kind;
+  navigate._t = setTimeout(() => delete html.dataset.nav, 450);
 }
 
 // Encre (InkWell) : une onde part du point touché, sur les éléments cliquables.

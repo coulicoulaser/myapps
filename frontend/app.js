@@ -168,13 +168,20 @@ async function openDashboard(slug, animate = false) {
   try { d = await api("/api/me/dashboard/" + encodeURIComponent(slug)); } catch (e) { toast(e.message); return; }
   $$("#tabs a").forEach((a) => a.classList.toggle("active", a.dataset.slug === slug));
   moveTabIndicator();
-  // Changement d'onglet : fondu enchaîné (Material « fade through ») ; sinon tuiles en cascade.
-  if (!(animate && withTransition("dash", () => renderDashboard(d, false)))) renderDashboard(d, true);
+  // Changement d'onglet : l'ancien contenu s'efface (≈ 110 ms), le nouveau arrive en cascade.
+  if (animate && !reducedMotion()) {
+    $("#sections").classList.add("leaving");
+    clearTimeout(openDashboard._t);
+    openDashboard._t = setTimeout(() => renderDashboard(d, true), 110);
+  } else renderDashboard(d, false);
 }
 
-function renderDashboard(d, cascade) {
+function renderDashboard(d, swap) {
   state.dash = d;
-  $("#sections").classList.toggle("calm", !cascade);
+  $("#sections").classList.remove("leaving");
+  const head = $(".portal-head");
+  head.classList.remove("swap");
+  if (swap) { void head.offsetWidth; head.classList.add("swap"); }
   $("#dashTitle").textContent = d.name;
   const first = (state.me.full_name || state.me.username).split(" ")[0];
   $("#dashHello").textContent = "Bonjour " + first + " 👋";
@@ -318,7 +325,7 @@ document.addEventListener("click", (e) => { if (!$("#userMenu").contains(e.targe
 $("#logoutBtn").onclick = logout;
 $("#adminLink").onclick = () => { $("#userDrop").classList.add("hidden"); enterAdmin(); };
 $("#goHome").onclick = () => enterApp();
-const backToPortal = () => { withTransition("back", () => show("app")); enterApp(); };
+const backToPortal = () => { navigate("back", () => show("app")); enterApp(); };
 $("#adminBrand").onclick = backToPortal;
 $("#backPortal").onclick = backToPortal;
 
@@ -327,7 +334,7 @@ $("#editToggle").onclick = () => {
   if (!state.me?.is_admin) return;
   state.editMode = !state.editMode;
   applyEditMode();
-  if (state.dash) renderDashboard(state.dash, true);
+  if (state.dash) renderDashboard(state.dash, false);
 };
 function applyEditMode() {
   const on = state.editMode, btn = $("#editToggle");
@@ -375,7 +382,7 @@ const adminData = {};
 const ADMIN_TABS = {};
 function enterAdmin(tab = "apps") {
   if (!state.me.is_admin) return;
-  if ($("#view-admin").classList.contains("hidden")) withTransition("fwd", () => show("admin"));
+  if ($("#view-admin").classList.contains("hidden")) navigate("fwd", () => show("admin"));
   setBg(state.branding.dashboard_background);
   $$("#adminNav a").forEach((a) => (a.onclick = () => selectAdminTab(a.dataset.tab)));
   selectAdminTab(tab);

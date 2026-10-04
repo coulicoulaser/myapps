@@ -51,9 +51,9 @@ function renderWizard() {
     <span class="spacer"></span>
     ${step.skip ? `<button class="btn-ghost" id="wzSkip">${esc(step.skip)}</button>` : ""}
     <button class="btn-accent" id="wzNext">${esc(step.nextLabel || "Continuer →")}</button>`;
-  if (canBack) $("#wzBack").onclick = () => { wz.i--; withTransition("back", renderWizard); };
+  if (canBack) $("#wzBack").onclick = () => { wz.i--; navigate("back", renderWizard); };
   if (later) $("#wzLater").onclick = () => { $("#view-setup").classList.add("hidden"); enterApp(); };
-  if (step.skip) $("#wzSkip").onclick = () => { wz.i++; withTransition("fwd", renderWizard); };
+  if (step.skip) $("#wzSkip").onclick = () => { wz.i++; navigate("fwd", renderWizard); };
   $("#wzNext").onclick = wizardNext;
   step.bind?.();
   const first = $("#setupBody input:not([type=checkbox]):not([type=color]):not([type=file])");
@@ -67,7 +67,7 @@ async function wizardNext() {
   try {
     if (step.next) await step.next();
     wz.i = Math.min(wz.i + 1, wz.steps.length - 1);
-    withTransition("fwd", renderWizard);
+    navigate("fwd", renderWizard);
   } catch (e) {
     wizErr(e.message);
   } finally {

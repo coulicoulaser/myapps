@@ -83,7 +83,6 @@ button, input, select, textarea { font: inherit; }
 
 #view-login:not(.hidden) { animation: fadeView .35s ease forwards; }
 @keyframes fadeView { from { opacity: 0; } to { opacity: 1; } }
-#view-admin:not(.hidden) .admin-wrap { animation: slideUp .4s cubic-bezier(.16, 1, .3, 1) both; }
 
 input, select, textarea {
   width: 100%; padding: .6rem .9rem; border-radius: 12px;
@@ -451,9 +450,6 @@ label.check { display: flex; align-items: center; gap: .5rem; font-size: .9rem; 
 .admin-main.enter .atable tbody tr { animation: contentIn var(--dur-m) var(--ease-decel) backwards; animation-delay: calc(min(var(--i, 0), 12) * 18ms); }
 .admin-main.enter .panel { animation: lift var(--dur-m) var(--ease-decel) backwards; }
 
-/* Changement de dashboard avec transition : pas de cascade en plus du fondu */
-#sections.calm .tile, #sections.calm .tile > *, #sections.calm .section-head * { animation: none; }
-
 /* Boutons : enfoncement */
 .btn-ghost, .icon-btn, .chip, .edit-toggle, .user-btn, .upd-pill, .swatch, .bg-opt { transition: transform var(--dur-s) var(--ease-std), background var(--dur-s), border-color var(--dur-s), box-shadow var(--dur-s); }
 .btn-accent:active, .btn-ghost:active, .chip:active, .edit-toggle:active, .user-btn:active, .upd-pill:active, .bg-opt:active, .icon-btn:active { transform: scale(.95); }
@@ -485,31 +481,31 @@ label.check { display: flex; align-items: center; gap: .5rem; font-size: .9rem; 
 @keyframes inkFade { to { opacity: 0; } }
 .tile .ink > span { background: var(--accent); opacity: .28; }
 
-/* Transitions entre écrans (View Transitions, navigateurs récents) */
-::view-transition-group(*) { animation-duration: var(--dur-m); animation-timing-function: var(--ease-std); }
-::view-transition-old(root), ::view-transition-new(root) { animation: none; }
-html[data-vt="dash"] #sections { view-transition-name: sections; }
-html[data-vt="dash"] .portal-head { view-transition-name: dash-head; }
-html[data-vt="dash"]::view-transition-old(sections), html[data-vt="dash"]::view-transition-old(dash-head) { animation: vtFadeOut 90ms var(--ease-accel) both; }
-html[data-vt="dash"]::view-transition-new(sections) { animation: vtFadeThrough 300ms var(--ease-decel) 60ms both; }
-html[data-vt="dash"]::view-transition-new(dash-head) { animation: vtAxisY 300ms var(--ease-decel) 40ms both; }
-html[data-vt="fwd"] .vt-page:not(.hidden), html[data-vt="back"] .vt-page:not(.hidden),
-html[data-vt="fwd"] .setup-main, html[data-vt="back"] .setup-main { view-transition-name: page; }
-html[data-vt="fwd"]::view-transition-old(page) { animation: vtOutLeft 200ms var(--ease-accel) both; }
-html[data-vt="fwd"]::view-transition-new(page) { animation: vtInRight 320ms var(--ease-decel) 50ms both; }
-html[data-vt="back"]::view-transition-old(page) { animation: vtOutRight 200ms var(--ease-accel) both; }
-html[data-vt="back"]::view-transition-new(page) { animation: vtInLeft 320ms var(--ease-decel) 50ms both; }
-@keyframes vtFadeOut { to { opacity: 0; } }
-@keyframes vtFadeThrough { from { opacity: 0; transform: scale(.94); } }
-@keyframes vtAxisY { from { opacity: 0; transform: translateY(12px); } }
-@keyframes vtOutLeft { to { opacity: 0; transform: translateX(-36px); } }
-@keyframes vtInRight { from { opacity: 0; transform: translateX(36px); } }
-@keyframes vtOutRight { to { opacity: 0; transform: translateX(36px); } }
-@keyframes vtInLeft { from { opacity: 0; transform: translateX(-36px); } }
+/* Transitions entre écrans. Pas de View Transitions : le navigateur y anime des captures
+   figées, qui perdent le flou des éléments « verre » (le flou sautait en fin d'animation).
+   On anime les vrais éléments : déplacement seul pour ce qui contient du verre,
+   fondu réservé au texte. */
+@keyframes navInRight { from { transform: translateX(44px); } }
+@keyframes navInLeft { from { transform: translateX(-44px); } }
+@keyframes textInRight { from { opacity: 0; transform: translateX(24px); } }
+@keyframes textInLeft { from { opacity: 0; transform: translateX(-24px); } }
+@keyframes headSwap { from { opacity: 0; transform: translateY(10px); } }
+html[data-nav="fwd"] #view-admin .admin-wrap { animation: navInRight var(--dur-m) var(--ease-decel) backwards; }
+html[data-nav="back"] #portal { animation: navInLeft var(--dur-m) var(--ease-decel) backwards; }
+html[data-nav="fwd"] .setup-body > * { animation: textInRight var(--dur-m) var(--ease-decel) backwards; }
+html[data-nav="back"] .setup-body > * { animation: textInLeft var(--dur-m) var(--ease-decel) backwards; }
+html[data-nav="fwd"] .setup-body > .added-apps { animation-name: navInRight; }
+html[data-nav="back"] .setup-body > .added-apps { animation-name: navInLeft; }
+/* Changement de dashboard : le contenu des tuiles s'efface, les tuiles se resserrent,
+   puis les nouvelles arrivent en cascade. */
+#sections.leaving .tile > .ico, #sections.leaving .tile > .tname, #sections.leaving .section-head > *,
+#sections.leaving .empty { opacity: 0; transition: opacity 90ms var(--ease-accel); }
+#sections.leaving .tile { transform: scale(.94); transition: transform 110ms var(--ease-accel); }
+.portal-head.swap > * { animation: headSwap var(--dur-m) var(--ease-decel) backwards; }
 
 /* Firefox : pas de translation sur les grands blocs (rectangle fantôme au repaint) */
 @supports (-moz-appearance: none) {
-  #view-admin:not(.hidden) .admin-wrap, .admin-main.enter .panel, .setup-card { animation: none; }
+  #view-admin:not(.hidden) .admin-wrap, html[data-nav] #view-admin .admin-wrap, html[data-nav] #portal, .admin-main.enter .panel, .setup-card { animation: none; }
 }
 
 /* Moins d'animations : préférence système ou réglage de l'administrateur */

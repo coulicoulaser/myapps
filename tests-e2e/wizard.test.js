@@ -113,6 +113,8 @@ function check(cond, msg) { if (!cond) throw new Error("ÉCHEC : " + msg); conso
   }
   check(true, "9 onglets d'administration rendus");
   // Régression 1.3.2 : l'animation d'entrée se jouait sur l'onglet précédent, encore affiché.
+  // On laisse finir l'entrée de l'onglet affiché (900 ms) pour ne tester que l'effet du clic.
+  await waitFor(() => !$("#adminMain").classList.contains("enter"), "fin de l'animation de l'onglet affiché", 3000);
   d.querySelector('#adminNav a[data-tab="users"]').click();
   check(!$("#adminMain").classList.contains("enter"), "pas d'animation d'entrée sur l'ancien onglet pendant le chargement");
   await waitFor(() => /Utilisateurs/.test($("#adminMain h1")?.textContent || "") && $("#adminMain").classList.contains("enter"), "animation d'entrée sur le nouvel onglet");

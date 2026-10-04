@@ -1,0 +1,51 @@
+# Tests à chaque push et pull request.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Dépendances (versions et empreintes figées)
+        run: |
+          pip install --require-hashes --no-deps -r requirements.lock
+          pip install pytest
+      - name: Tests API
+        working-directory: backend
+        run: python -m pytest -q
+      - name: Vérifications statiques
+        run: |
+          bash -n install.sh scripts/build-release.sh scripts/lock.sh
+          for f in frontend/*.js; do node --check "$f"; done
+          python scripts/sign-release.py 2>/dev/null | grep -q keygen
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Parcours navigateur simulé (jsdom)
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --require-hashes --no-deps -r requirements.lock
+          tests-e2e/run.sh

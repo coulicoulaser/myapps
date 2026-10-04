@@ -1,0 +1,69 @@
+# Publication d'une version : pousser un tag vX.Y.Z identique au premier
+# « ## [X.Y.Z] » du CHANGELOG. Une version avec suffixe (1.2.0-beta.1) est publiée
+# en pré-version : seules les installations sur le canal « bêta » la voient.
+#
+# Prérequis (Settings du dépôt) :
+#   - Environments › « release » : ajouter un « Required reviewer » (vous) pour
+#     valider chaque publication avant que la clé de signature ne soit utilisée ;
+#   - dans cet environnement, le secret MYAPPS_SIGNING_KEY (clé secrète de signature).
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          pip install --require-hashes --no-deps -r requirements.lock
+          pip install pytest
+      - working-directory: backend
+        run: python -m pytest -q
+
+  publish:
+    needs: tests
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Dépendances de signature
+        run: pip install --require-hashes --no-deps -r requirements.lock
+      - name: Tag = version du CHANGELOG
+        run: |
+          V="$(sed -n 's/^## \[\([0-9][0-9.]*[0-9A-Za-z.-]*\)\].*/\1/p' CHANGELOG.md | head -1)"
+          [ "v$V" = "$GITHUB_REF_NAME" ] || { echo "Tag $GITHUB_REF_NAME ≠ CHANGELOG $V"; exit 1; }
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+      - name: Archive et manifeste
+        env:
+          MYAPPS_REPO: ${{ github.repository }}
+          MIN_FROM: ${{ vars.MYAPPS_MIN_FROM }}
+        run: scripts/build-release.sh
+      - name: Signature
+        env:
+          MYAPPS_SIGNING_KEY: ${{ secrets.MYAPPS_SIGNING_KEY }}
+        run: python scripts/sign-release.py sign
+      - name: Publication GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          FLAGS="--latest"
+          case "$VERSION" in *-*) FLAGS="--prerelease --latest=false" ;; esac
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/myapps-$VERSION.tar.gz" dist/latest.json dist/latest.json.minisig \
+            --title "MyApps $VERSION" --notes-file dist/notes.md $FLAGS

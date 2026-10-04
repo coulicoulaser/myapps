@@ -1,0 +1,7 @@
+{
+  "name": "myapps-tests-e2e",
+  "private": true,
+  "description": "Parcours navigateur simulé (jsdom) contre un vrai serveur MyApps",
+  "scripts": { "test": "bash run.sh" },
+  "devDependencies": { "jsdom": "^24.1.0" }
+}

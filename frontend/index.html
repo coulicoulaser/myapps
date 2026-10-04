@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MyApps</title>
+  <link rel="icon" id="favicon" href="favicon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Fond dynamique (image par dashboard) — 2 couches pour fondu enchaîné -->
+  <div class="bg-layer" id="bgLayer"></div>
+  <div class="bg-layer" id="bgLayer2"></div>
+  <div class="bg-veil" id="bgVeil"></div>
+
+  <!-- Écran d'attente le temps de décider : assistant, login ou portail -->
+  <div class="splash" id="splash">
+    <span class="brand-slot lg"></span>
+    <div class="splash-row"><span class="splash-spin"></span><span>Chargement…</span></div>
+  </div>
+
+  <!-- Écran « Bienvenue » après connexion -->
+  <div class="welcome hidden" id="welcome">
+    <span class="brand-slot lg"></span>
+    <h2 class="welcome-name" id="welcomeName">Bienvenue</h2>
+    <div class="welcome-spinner"></div>
+    <p class="welcome-text">Chargement du portail…</p>
+  </div>
+
+  <!-- ============ ASSISTANT DE PREMIER DÉMARRAGE ============ -->
+  <div class="setup hidden" id="view-setup">
+    <div class="setup-card glass-strong">
+      <aside class="setup-side">
+        <span class="brand-slot"></span>
+        <ol class="setup-steps" id="setupSteps"></ol>
+      </aside>
+      <section class="setup-main">
+        <div class="setup-progress"><span id="setupProgress"></span></div>
+        <div class="setup-body" id="setupBody"></div>
+        <div class="setup-foot" id="setupFoot"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ============ LOGIN ============ -->
+  <main class="login hidden" id="view-login">
+    <form id="loginForm" class="login-card">
+      <div class="login-logo-wrap"><span class="brand-slot lg"></span></div>
+      <div class="login-body">
+        <label>Identifiant
+          <input id="loginUser" autocomplete="username" required>
+        </label>
+        <label>Mot de passe
+          <input id="loginPass" type="password" autocomplete="current-password" required>
+        </label>
+        <label class="login-remember"><input type="checkbox" id="loginRemember"><span>Mémoriser la connexion pendant 30 jours</span></label>
+        <p class="login-err hidden" id="loginErr"></p>
+        <button class="login-submit" type="submit">Se connecter</button>
+        <div class="login-sep hidden" id="loginSep"><span>ou</span></div>
+        <button type="button" class="sso-btn hidden" id="ssoBtn">Se connecter avec <span id="ssoName">SSO</span></button>
+      </div>
+    </form>
+  </main>
+
+  <!-- ============ PORTAIL ============ -->
+  <div class="hidden" id="view-app">
+    <header class="topbar glass">
+      <div class="brand" id="goHome"><span class="brand-slot"></span></div>
+
+      <div class="search" id="search">
+        <svg viewBox="0 0 24 24" class="search-ic"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="searchInput" placeholder="Rechercher une application…" autocomplete="off">
+        <div class="search-drop hidden" id="searchDrop"></div>
+      </div>
+
+      <div class="topbar-right">
+        <button class="upd-pill hidden" id="updPill" title="Une mise à jour est disponible"></button>
+        <button class="edit-toggle hidden" id="editToggle" title="Mode édition">✏️</button>
+        <div class="weather hidden" id="weather">
+          <span class="w-ic" id="wIcon">⏳</span>
+          <b class="w-temp" id="wTemp">—</b>
+          <em class="w-label" id="wLabel"></em>
+          <span class="w-sep"></span>
+          <select id="wSite" class="w-site" aria-label="Site météo"></select>
+        </div>
+        <div class="usermenu" id="userMenu">
+          <button class="user-btn" id="userBtn">
+            <span class="avatar" id="avatar">?</span>
+            <span class="uname" id="uname"></span>
+            <span class="chev">▾</span>
+          </button>
+          <div class="user-drop hidden" id="userDrop">
+            <a id="adminLink" class="hidden">⚙️ Administration</a>
+            <a id="logoutBtn">⏻ Se déconnecter</a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <nav class="tabs" id="tabs"></nav>
+
+    <main class="portal" id="portal">
+      <div class="portal-head">
+        <h1 id="dashTitle">—</h1>
+        <p id="dashHello"></p>
+      </div>
+      <div id="sections"></div>
+    </main>
+  </div>
+
+  <!-- ============ ADMIN ============ -->
+  <div class="hidden" id="view-admin">
+    <header class="topbar glass">
+      <div class="brand" id="adminBrand">
+        <span class="brand-slot"></span>
+        <span class="brand-sub">Admin</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn-ghost" id="backPortal">← Portail</button>
+      </div>
+    </header>
+    <div class="admin-wrap">
+      <aside class="glass admin-nav" id="adminNav">
+        <a data-tab="apps" class="active">Applications</a>
+        <a data-tab="appgroups">Sections</a>
+        <a data-tab="dashboards">Dashboards</a>
+        <a data-tab="groups">Groupes</a>
+        <a data-tab="users">Utilisateurs</a>
+        <a data-tab="sites">Sites (météo)</a>
+        <a data-tab="settings">Réglages</a>
+        <a data-tab="updates">Mises à jour <span class="badge def hidden" id="updBadge">1</span></a>
+        <a data-tab="changelog">Changelog</a>
+      </aside>
+      <main class="admin-main" id="adminMain"></main>
+    </div>
+  </div>
+
+  <!-- Modale générique -->
+  <div class="modal-overlay hidden" id="modal">
+    <div class="glass-strong modal-card">
+      <div class="modal-head">
+        <h2 id="modalTitle"></h2>
+        <button id="modalClose" aria-label="Fermer">✕</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-foot" id="modalFoot"></div>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="common.js"></script>
+  <script src="setup.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

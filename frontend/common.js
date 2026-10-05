@@ -15,7 +15,11 @@ async function api(path, opts = {}) {
   const headers = opts.headers || {};
   if (state.token) headers["Authorization"] = "Bearer " + state.token;
   if (opts.body && !(opts.body instanceof FormData)) headers["Content-Type"] = "application/json";
-  const res = await fetch(path, { ...opts, headers });
+  // Panne réseau ou réponse coupée en route (proxy…) : message lisible plutôt que
+  // « Failed to fetch » / « Unexpected end of JSON input ».
+  let res;
+  try { res = await fetch(path, { ...opts, headers }); }
+  catch (e) { console.error("MyApps : requête " + path + " en échec", e); throw new Error("Serveur injoignable, vérifiez la connexion"); }
   if (res.status === 401 && state.token) { sessionLost(); throw new Error("Session expirée"); }
   if (!res.ok) {
     let msg = "Erreur " + res.status;
@@ -26,7 +30,8 @@ async function api(path, opts = {}) {
     throw new Error(msg);
   }
   if (res.status === 204) return null;
-  return res.json();
+  try { return await res.json(); }
+  catch (e) { console.error("MyApps : réponse illisible pour " + path, e); throw new Error("Réponse du serveur incomplète ou illisible"); }
 }
 
 function toast(msg) {

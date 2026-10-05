@@ -18,24 +18,45 @@ async function boot() {
   if (params.get("sso_error")) toast("Échec de la connexion SSO (" + params.get("sso_error") + ")");
   if (location.hash || location.search) history.replaceState({}, "", location.pathname);
 
-  try { applyBranding(await fetch("/api/auth/branding").then((r) => r.json())); } catch { applyBranding({}); }
+  try { applyBranding(await fetch("/api/auth/branding").then((r) => r.json())); }
+  catch (e) { console.warn("MyApps : apparence non chargée, thème par défaut", e); applyBranding({}); }
 
   let setup = { required: false, admin_exists: true };
-  try { setup = await fetch("/api/setup/status").then((r) => r.json()); } catch {}
+  try { setup = await fetch("/api/setup/status").then((r) => r.json()); }
+  catch (e) { console.warn("MyApps : état de l'assistant non chargé", e); }
   state.setupRequired = setup.required;
   if (setup.required && !setup.admin_exists) { saveToken(null); state.token = null; return startWizard({ adminExists: false }); }
 
   try {
     const sso = await fetch("/api/auth/sso/config").then((r) => r.json());
     if (sso.enabled) { $("#ssoBtn").classList.remove("hidden"); $("#loginSep").classList.remove("hidden"); $("#ssoName").textContent = sso.provider; }
-  } catch {}
+  } catch (e) { console.warn("MyApps : configuration SSO non chargée, bouton SSO masqué", e); }
 
-  if (state.token) {
-    const r = await fetch("/api/auth/me", { headers: { Authorization: "Bearer " + state.token } }).catch(() => null);
-    if (r && r.ok) { state.me = await r.json(); return afterLogin(false); }
-    saveToken(null); state.token = null;
-  }
+  if (state.token) return resumeSession();
   show("login");
+}
+
+// Reprise de session : seul un refus explicite (401/403) efface le jeton. Une panne passagère
+// (réseau, 5xx, réponse tronquée) ne déconnecte pas : nouvel essai quelques secondes plus tard.
+async function resumeSession(attempt = 0) {
+  let r = null;
+  try { r = await fetch("/api/auth/me", { headers: { Authorization: "Bearer " + state.token } }); }
+  catch (e) { console.error("MyApps : /api/auth/me injoignable", e); }
+  if (r && (r.status === 401 || r.status === 403)) { saveToken(null); state.token = null; return show("login"); }
+  if (r && r.ok) {
+    try { state.me = await r.json(); }
+    catch (e) { console.error("MyApps : réponse /api/auth/me illisible", e); state.me = null; }
+    if (state.me) { $("#splashMsg").textContent = "Chargement…"; $("#splashLogin")?.remove(); return afterLogin(false); }
+  }
+  const delay = Math.min(30, 3 * 2 ** attempt);            // 3, 6, 12, 24, puis 30 s
+  $("#splashMsg").textContent = `Serveur momentanément injoignable, nouvel essai dans ${delay} s…`;
+  if (!$("#splashLogin")) {
+    // Échappatoire : abandonner la session gardée et revenir à la connexion.
+    $("#splash").insertAdjacentHTML("beforeend", `<button class="btn-ghost sm" id="splashLogin">Revenir à la connexion</button>`);
+    $("#splashLogin").onclick = () => { clearTimeout(resumeSession._t); $("#splashLogin").remove(); $("#splashMsg").textContent = "Chargement…"; endSession(); };
+  }
+  clearTimeout(resumeSession._t);
+  resumeSession._t = setTimeout(() => resumeSession(attempt + 1), delay * 1000);
 }
 
 // Après connexion : l'assistant reprend pour un admin s'il n'a pas été terminé.
@@ -67,14 +88,20 @@ $("#loginForm").addEventListener("submit", async (e) => {
   const body = new URLSearchParams({ username: $("#loginUser").value, password: $("#loginPass").value, remember: $("#loginRemember").checked ? "true" : "false" });
   try {
     const r = await fetch("/api/auth/login", { method: "POST", body });
-    if (!r.ok) throw new Error("bad");
+    // Seul un refus (4xx) veut dire « identifiants invalides » ; serveur injoignable, 5xx ou
+    // réponse coupée : message distinct, pour ne pas faire douter d'un mot de passe correct.
+    if (r.status >= 400 && r.status < 500) throw Object.assign(new Error("refus"), { denied: true });
+    if (!r.ok) throw new Error("Erreur " + r.status);
     const j = await r.json();
     state.token = j.access_token; saveToken(state.token);
     state.me = j.user;
     $("#loginPass").value = "";
     afterLogin(true);
-  } catch {
-    const el = $("#loginErr"); el.textContent = "Identifiants invalides."; el.classList.remove("hidden");
+  } catch (err) {
+    if (!err.denied) console.error("MyApps : connexion impossible", err);
+    const el = $("#loginErr");
+    el.textContent = err.denied ? "Identifiants invalides." : "Connexion impossible : serveur injoignable ou réponse incomplète. Réessayez.";
+    el.classList.remove("hidden");
   } finally {
     btn.classList.remove("loading");
   }
@@ -101,7 +128,28 @@ function endSession() {
 }
 
 // ---------- Portail ----------
-async function enterApp() {
+// Ne rejette jamais : une erreur imprévue affiche l'état d'erreur au lieu d'un portail vide.
+function enterApp() {
+  return loadPortal().catch((e) => {
+    console.error("MyApps : chargement du portail en échec", e);
+    portalError("Impossible de charger vos tableaux de bord.", e, enterApp);
+  });
+}
+
+// État d'erreur du portail (persistant, avec « Réessayer ») : distinct de « aucun dashboard »,
+// et jamais l'ancien dashboard laissé sous un autre onglet.
+let _dashSeq = 0;
+function portalError(title, err, retry) {
+  _dashSeq++;                                           // un dashboard encore en route ne s'affichera pas
+  clearTimeout(openDashboard._t);
+  state.dash = null;
+  const sec = $("#sections");
+  sec.classList.remove("leaving");
+  sec.innerHTML = `<div class="empty glass">${esc(title)}<br><span class="muted">${esc(err?.message || "")}</span><br><button class="btn-accent" id="retryLoad">Réessayer</button></div>`;
+  $("#retryLoad").onclick = () => { $("#retryLoad").classList.add("loading"); retry(); };
+}
+
+async function loadPortal() {
   show("app");
   const me = state.me;
   $("#uname").textContent = me.full_name || me.username;
@@ -112,7 +160,7 @@ async function enterApp() {
   applyEditMode();
 
   // Météo : seulement si au moins un site est défini
-  try { state.sites = await api("/api/sites"); } catch { state.sites = []; }
+  try { state.sites = await api("/api/sites"); } catch (e) { console.error("MyApps : sites (météo) non chargés", e); state.sites = []; }
   const wSite = $("#wSite");
   $("#weather").classList.toggle("hidden", !state.sites.length);
   if (state.sites.length) {
@@ -124,14 +172,28 @@ async function enterApp() {
   }
 
   refreshUpdateHint();
-  try { state.apps = await api("/api/me/apps"); } catch { state.apps = []; }
+  try { state.apps = await api("/api/me/apps"); } catch (e) { console.error("MyApps : applications (recherche) non chargées", e); state.apps = []; }
 
-  let tabs = [];
-  try { tabs = await api("/api/me/dashboards"); } catch {}
+  let tabs;
+  try { tabs = await api("/api/me/dashboards"); }
+  catch (e) {
+    // Échec ≠ « aucun dashboard attribué » : message distinct et nouvel essai possible.
+    console.error("MyApps : liste des dashboards non chargée", e);
+    renderTabs([]);
+    setBg(state.branding.dashboard_background);
+    $("#dashTitle").textContent = ""; $("#dashHello").textContent = "";
+    return portalError("Impossible de charger vos tableaux de bord.", e, enterApp);
+  }
   renderTabs(tabs);
-  const def = tabs.length ? await api("/api/me/default-dashboard") : { slug: null };
+  let def = { slug: null };
+  if (tabs.length) {
+    try { def = (await api("/api/me/default-dashboard")) || def; }
+    catch (e) { console.error("MyApps : dashboard par défaut inconnu, repli sur le premier onglet", e); def = { slug: tabs[0].slug }; }
+  }
   if (def.slug) return openDashboard(def.slug);
 
+  _dashSeq++;
+  state.dash = null;
   setBg(state.branding.dashboard_background);
   $("#dashTitle").textContent = "";
   $("#dashHello").textContent = "";
@@ -164,14 +226,23 @@ window.addEventListener("resize", () => {
 });
 
 async function openDashboard(slug, animate = false) {
-  let d;
-  try { d = await api("/api/me/dashboard/" + encodeURIComponent(slug)); } catch (e) { toast(e.message); return; }
+  const seq = ++_dashSeq;                               // clics rapides : seule la dernière demande s'affiche
+  let d, err = null;
+  try { d = await api("/api/me/dashboard/" + encodeURIComponent(slug)); } catch (e) { err = e; }
+  if (seq !== _dashSeq) return;
   $$("#tabs a").forEach((a) => a.classList.toggle("active", a.dataset.slug === slug));
   moveTabIndicator();
+  if (err) {
+    // Erreur persistante à la place du contenu : l'ancien dashboard ne reste pas sous ce nouvel onglet.
+    console.error("MyApps : dashboard " + slug + " non chargé", err);
+    const tab = $$("#tabs a").find((a) => a.dataset.slug === slug);
+    $("#dashTitle").textContent = tab ? tab.textContent : ""; $("#dashHello").textContent = "";
+    return portalError("Impossible de charger ce tableau de bord.", err, () => openDashboard(slug));
+  }
   // Changement d'onglet : l'ancien contenu s'efface (≈ 110 ms), le nouveau arrive en cascade.
+  clearTimeout(openDashboard._t);
   if (animate && !reducedMotion()) {
     $("#sections").classList.add("leaving");
-    clearTimeout(openDashboard._t);
     openDashboard._t = setTimeout(() => renderDashboard(d, true), 110);
   } else renderDashboard(d, false);
 }
@@ -266,7 +337,7 @@ async function loadWeather(slug) {
     const w = await api("/api/me/weather" + (slug ? "?site=" + encodeURIComponent(slug) : ""));
     $("#wIcon").textContent = w.icon; $("#wTemp").textContent = w.temperature + "°";
     $("#wLabel").textContent = w.label; $("#wSite").value = w.slug;
-  } catch { $("#wIcon").textContent = "🌡️"; $("#wTemp").textContent = "—"; $("#wLabel").textContent = ""; }
+  } catch (e) { console.warn("MyApps : météo non chargée", e); $("#wIcon").textContent = "🌡️"; $("#wTemp").textContent = "—"; $("#wLabel").textContent = ""; }
 }
 
 // ---------- Recherche (apps + web) ----------
@@ -408,7 +479,10 @@ function selectAdminTab(tab) {
 }
 function runAdminTab(tab, seq) {
   ADMIN_TABS[tab]()
-    .catch((e) => { if (seq === _tabSeq) $("#adminMain").innerHTML = `<div class="glass panel"><p class="muted">Erreur : ${esc(e.message)}</p></div>`; })
+    .catch((e) => {
+      console.error("MyApps : onglet d'administration « " + tab + " » en échec", e);
+      if (seq === _tabSeq) adminTabError(e);
+    })
     .finally(() => {
       if (seq === _tabSeq) {
         _tabDone = true;
@@ -418,11 +492,64 @@ function runAdminTab(tab, seq) {
     });
 }
 
-async function loadRefs() {
-  const [apps, appGroups, dashboards, groups] = await Promise.all([
-    api("/api/apps"), api("/api/app-groups"), api("/api/dashboards"), api("/api/groups"),
-  ]);
-  Object.assign(adminData, { apps, appGroups, dashboards, groups });
+function adminTabError(e) {
+  $("#adminMain").innerHTML = `<div class="glass panel"><p class="muted">Erreur : ${esc(e.message)}</p><button class="btn-ghost sm" data-retry-tab>Réessayer</button></div>`;
+}
+// Rechargement d'un onglet après un enregistrement ou une suppression (sans animation d'entrée).
+// Ne rejette jamais : si le rechargement échoue, la liste périmée laisse place à l'erreur avec
+// « Réessayer » (avant : rejet non géré, liste restée périmée sans rien dire).
+async function reloadAdminTab(tab) {
+  const seq = _tabSeq;
+  try { await ADMIN_TABS[tab](); }
+  catch (e) {
+    console.error("MyApps : rechargement de l'onglet « " + tab + " » en échec", e);
+    if (seq === _tabSeq) adminTabError(e);
+  }
+  // Un autre onglet a été ouvert entre-temps et ce rechargement l'a écrasé : on le réaffiche.
+  if (seq !== _tabSeq && _tabDone) { _tabDone = false; runAdminTab(_tabCur, _tabSeq); }
+}
+
+// « Réessayer » (erreur d'onglet ou références manquantes) : relance l'onglet courant.
+$("#adminMain").addEventListener("click", (e) => { if (e.target.closest("[data-retry-tab]")) selectAdminTab(_tabCur); });
+
+// Références de l'administration, chargées indépendamment (allSettled) : une requête en échec
+// ne vide plus tout l'onglet. `main` = la liste propre à l'onglet : sans elle, l'onglet est en
+// erreur ; les autres manquantes gardent leur dernière valeur connue et sont signalées.
+const REFS = {
+  apps: ["/api/apps", "applications"], appGroups: ["/api/app-groups", "sections"],
+  dashboards: ["/api/dashboards", "dashboards"], groups: ["/api/groups", "groupes"],
+  sites: ["/api/sites", "sites"], users: ["/api/users", "utilisateurs"],
+};
+let _refsFailed = [];
+async function loadRefs(main, extra = []) {
+  const keys = ["apps", "appGroups", "dashboards", "groups", ...extra];
+  const res = await Promise.allSettled(keys.map((k) => api(REFS[k][0])));
+  _refsFailed = [];
+  let mainErr = null;
+  res.forEach((r, i) => {
+    const k = keys[i];
+    if (r.status === "fulfilled") { adminData[k] = r.value; return; }
+    console.error("MyApps : " + REFS[k][0] + " non chargé", r.reason);
+    _refsFailed.push(k);
+    adminData[k] = adminData[k] || [];
+    if (k === main) mainErr = r.reason;
+  });
+  if (mainErr) throw new Error(`impossible de charger les ${REFS[main][1]} (${mainErr.message})`);
+}
+// Bandeau sous le titre de l'onglet : quelles références manquent.
+function refsNotice(m) {
+  if (!_refsFailed.length) return;
+  const head = $(".admin-head", m);
+  if (head) head.insertAdjacentHTML("afterend", `<div class="glass panel"><p class="muted">⚠️ Non chargé : ${esc(_refsFailed.map((k) => REFS[k][1]).join(", "))}.
+    Les listes qui en dépendent peuvent être incomplètes ; la modification reste bloquée jusqu'au rechargement.</p>
+    <button class="btn-ghost sm" data-retry-tab>Réessayer</button></div>`);
+}
+// Formulaires : refusés tant qu'une référence manque (enregistrer écraserait des droits,
+// sections ou sites que le formulaire n'affiche pas).
+function refsComplete() {
+  if (!_refsFailed.length) return true;
+  toast("Données incomplètes (" + _refsFailed.map((k) => REFS[k][1]).join(", ") + ") : cliquez sur « Réessayer » avant de modifier.");
+  return false;
 }
 const groupOpts = () => adminData.groups.map((g) => ({ id: g.id, label: g.is_everyone ? "★ " + g.name + " (tous les connectés)" : g.name + (g.source === "ad" ? " (AD)" : "") }));
 
@@ -456,7 +583,7 @@ ADMIN_TABS.changelog = async function () {
 
 // ---- Applications ----
 ADMIN_TABS.apps = async function () {
-  await loadRefs();
+  await loadRefs("apps");
   const m = $("#adminMain");
   m.innerHTML = `<div class="admin-head"><h1>Applications</h1><button class="btn-accent" id="addApp">＋ Ajouter</button></div>
     <div class="list">${adminData.apps.map((a) => `
@@ -466,15 +593,17 @@ ADMIN_TABS.apps = async function () {
         <button class="icon-btn" data-edit="${a.id}" title="Modifier">✏️</button>
         <button class="icon-btn" data-del="${a.id}" title="Supprimer">🗑️</button>
       </div>`).join("") || `<div class="glass empty">Aucune application. Cliquez sur « Ajouter ».</div>`}</div>`;
+  refsNotice(m);
   $("#addApp").onclick = () => appForm();
   $$("[data-edit]", m).forEach((b) => (b.onclick = () => appForm(adminData.apps.find((x) => x.id == b.dataset.edit))));
   $$("[data-del]", m).forEach((b) => (b.onclick = async () => {
     if (!confirmDel("cette application")) return;
-    try { await api("/api/apps/" + b.dataset.del, { method: "DELETE" }); ADMIN_TABS.apps(); } catch (e) { toast(e.message); }
+    try { await api("/api/apps/" + b.dataset.del, { method: "DELETE" }); await reloadAdminTab("apps"); } catch (e) { toast(e.message); }
   }));
 };
 
 function appForm(a) {
+  if (!refsComplete()) return;
   const agOpts = adminData.appGroups.map((g) => ({ id: g.id, label: g.name }));
   const everyone = adminData.groups.find((g) => g.is_everyone);
   modal(a ? "Modifier l'application" : "Ajouter une application", `
@@ -501,7 +630,7 @@ function appForm(a) {
     if (!payload.name || !payload.url) throw new Error("Nom et URL requis");
     if (!/^[a-z][a-z0-9+.-]*:/i.test(payload.url)) payload.url = "https://" + payload.url;
     await api(a ? "/api/apps/" + a.id : "/api/apps", { method: a ? "PATCH" : "POST", body: JSON.stringify(payload) });
-    toast("Application enregistrée"); ADMIN_TABS.apps();
+    toast("Application enregistrée"); await reloadAdminTab("apps");
   });
   bindImagePicker("fImg");
   $$("#modalBody .chip").forEach((c) => (c.onclick = () => {
@@ -525,7 +654,7 @@ function appForm(a) {
 
 // ---- Sections (groupes d'applications) ----
 ADMIN_TABS.appgroups = async function () {
-  await loadRefs();
+  await loadRefs("appGroups");
   const m = $("#adminMain");
   m.innerHTML = `<div class="admin-head"><h1>Sections</h1><button class="btn-accent" id="add">＋ Ajouter</button></div>
     <p class="muted" style="margin:-.6rem 0 1rem">Une section regroupe des applications ; elle peut être affichée sur plusieurs dashboards.</p>
@@ -534,14 +663,16 @@ ADMIN_TABS.appgroups = async function () {
         <div class="grow"><div class="t">${esc(g.name)}</div><div class="s">${g.app_ids.length} application(s)</div></div>
         <button class="icon-btn" data-edit="${g.id}" title="Modifier">✏️</button><button class="icon-btn" data-del="${g.id}" title="Supprimer">🗑️</button>
       </div>`).join("") || `<div class="glass empty">Aucune section.</div>`}</div>`;
+  refsNotice(m);
   $("#add").onclick = () => appGroupForm();
   $$("[data-edit]", m).forEach((b) => (b.onclick = () => appGroupForm(adminData.appGroups.find((x) => x.id == b.dataset.edit))));
   $$("[data-del]", m).forEach((b) => (b.onclick = async () => {
     if (!confirmDel("cette section (les applications sont conservées)")) return;
-    try { await api("/api/app-groups/" + b.dataset.del, { method: "DELETE" }); ADMIN_TABS.appgroups(); } catch (e) { toast(e.message); }
+    try { await api("/api/app-groups/" + b.dataset.del, { method: "DELETE" }); await reloadAdminTab("appgroups"); } catch (e) { toast(e.message); }
   }));
 };
 function appGroupForm(g) {
+  if (!refsComplete()) return;
   const opts = adminData.apps.map((a) => ({ id: a.id, label: a.name }));
   modal(g ? "Modifier la section" : "Nouvelle section", `
     <label>Nom</label><input id="gName" value="${esc(g?.name || "")}">
@@ -554,14 +685,14 @@ function appGroupForm(g) {
     const payload = { name: $("#gName").value.trim(), color: $("#gOwn").checked ? $("#gColor").value : null, sort_order: Number($("#gOrder").value), app_ids: checkedIds("gApps") };
     if (!payload.name) throw new Error("Nom requis");
     await api(g ? "/api/app-groups/" + g.id : "/api/app-groups", { method: g ? "PATCH" : "POST", body: JSON.stringify(payload) });
-    toast("Section enregistrée"); ADMIN_TABS.appgroups();
+    toast("Section enregistrée"); await reloadAdminTab("appgroups");
   });
   $("#gColor").oninput = () => ($("#gOwn").checked = true);
 }
 
 // ---- Dashboards ----
 ADMIN_TABS.dashboards = async function () {
-  await loadRefs();
+  await loadRefs("dashboards");
   const m = $("#adminMain");
   m.innerHTML = `<div class="admin-head"><h1>Dashboards</h1><button class="btn-accent" id="add">＋ Ajouter</button></div>
     <div class="list">${adminData.dashboards.map((d) => `
@@ -571,14 +702,16 @@ ADMIN_TABS.dashboards = async function () {
           <div class="s">/${esc(d.slug)} · ${d.app_group_ids.length} section(s) · ${d.group_ids.length} groupe(s)</div></div>
         <button class="icon-btn" data-edit="${d.id}" title="Modifier">✏️</button><button class="icon-btn" data-del="${d.id}" title="Supprimer">🗑️</button>
       </div>`).join("") || `<div class="glass empty">Aucun dashboard.</div>`}</div>`;
+  refsNotice(m);
   $("#add").onclick = () => dashForm();
   $$("[data-edit]", m).forEach((b) => (b.onclick = () => dashForm(adminData.dashboards.find((x) => x.id == b.dataset.edit))));
   $$("[data-del]", m).forEach((b) => (b.onclick = async () => {
     if (!confirmDel("ce dashboard")) return;
-    try { await api("/api/dashboards/" + b.dataset.del, { method: "DELETE" }); ADMIN_TABS.dashboards(); } catch (e) { toast(e.message); }
+    try { await api("/api/dashboards/" + b.dataset.del, { method: "DELETE" }); await reloadAdminTab("dashboards"); } catch (e) { toast(e.message); }
   }));
 };
 function dashForm(d) {
+  if (!refsComplete()) return;
   const agOpts = adminData.appGroups.map((g) => ({ id: g.id, label: g.name }));
   const everyone = adminData.groups.find((g) => g.is_everyone);
   modal(d ? "Modifier le dashboard" : "Nouveau dashboard", `
@@ -599,7 +732,7 @@ function dashForm(d) {
       app_group_ids: checkedIds("dAg"), group_ids: checkedIds("dGr") };
     if (!payload.name || !payload.slug) throw new Error("Nom requis");
     await api(d ? "/api/dashboards/" + d.id : "/api/dashboards", { method: d ? "PATCH" : "POST", body: JSON.stringify(payload) });
-    toast("Dashboard enregistré"); ADMIN_TABS.dashboards();
+    toast("Dashboard enregistré"); await reloadAdminTab("dashboards");
   });
   bindImagePicker("dBg");
   $("#dName").oninput = () => { if (!d) $("#dSlug").value = slugify($("#dName").value); };
@@ -607,8 +740,7 @@ function dashForm(d) {
 
 // ---- Groupes (locaux + AD) ----
 ADMIN_TABS.groups = async function () {
-  await loadRefs();
-  adminData.sites = await api("/api/sites");
+  await loadRefs("groups", ["sites"]);
   const m = $("#adminMain");
   const siteOpts = (g) => adminData.sites.map((s) => `<option value="${s.id}" ${g.site_id == s.id ? "selected" : ""}>${esc(s.name)}</option>`).join("");
   const hasAd = adminData.groups.some((g) => g.source === "ad");
@@ -629,44 +761,44 @@ ADMIN_TABS.groups = async function () {
         ${g.source === "local" && !g.is_everyone ? `<button class="icon-btn" data-ren="${g.id}" title="Renommer">✏️</button>` : ""}
         ${g.is_everyone ? "" : `<button class="icon-btn" data-del="${g.id}" title="Supprimer">🗑️</button>`}</td></tr>`).join("")}</tbody></table></div>
     <p class="muted" style="margin-top:.6rem">« Tout le monde » contient tous les utilisateurs connectés. Les groupes locaux s'attribuent dans la fiche utilisateur ; les groupes AD suivent l'annuaire. 👥 = créer les comptes des membres d'un groupe AD.</p>`;
+  refsNotice(m);
   $("#addGrp").onclick = () => modal("Nouveau groupe local", `<label>Nom</label><input id="ngName"><label>Description</label><input id="ngDesc">`, async () => {
     await api("/api/groups", { method: "POST", body: JSON.stringify({ name: $("#ngName").value, description: $("#ngDesc").value }) });
-    toast("Groupe créé"); ADMIN_TABS.groups();
+    toast("Groupe créé"); await reloadAdminTab("groups");
   }, "Créer");
   $("#sync").onclick = async () => {
     $("#sync").textContent = "Synchronisation…";
-    try { const r = await api("/api/groups/sync", { method: "POST" }); toast(r.synced + " groupe(s) synchronisé(s)" + (r.skipped ? `, ${r.skipped} ignoré(s) (nom déjà pris par un groupe local)` : "")); ADMIN_TABS.groups(); }
+    try { const r = await api("/api/groups/sync", { method: "POST" }); toast(r.synced + " groupe(s) synchronisé(s)" + (r.skipped ? `, ${r.skipped} ignoré(s) (nom déjà pris par un groupe local)` : "")); await reloadAdminTab("groups"); }
     catch (e) { toast(e.message); $("#sync").textContent = "⟳ Synchroniser depuis l'AD"; }
   };
   if (hasAd) $("#delAll").onclick = async () => {
     if (!confirm("Supprimer tous les groupes issus de l'AD ? Les groupes locaux sont conservés.")) return;
-    try { const r = await api("/api/groups", { method: "DELETE" }); toast(r.deleted + " groupe(s) supprimé(s)"); ADMIN_TABS.groups(); } catch (e) { toast(e.message); }
+    try { const r = await api("/api/groups", { method: "DELETE" }); toast(r.deleted + " groupe(s) supprimé(s)"); await reloadAdminTab("groups"); } catch (e) { toast(e.message); }
   };
   $$("[data-site]", m).forEach((s) => (s.onchange = async () => { try { await api("/api/groups/" + s.dataset.site, { method: "PATCH", body: JSON.stringify({ site_id: s.value ? Number(s.value) : null }) }); toast("Site mis à jour"); } catch (e) { toast(e.message); } }));
   $$("[data-def]", m).forEach((s) => (s.onchange = async () => { try { await api("/api/groups/" + s.dataset.def, { method: "PATCH", body: JSON.stringify({ default_dashboard_id: s.value ? Number(s.value) : null }) }); toast("Mis à jour"); } catch (e) { toast(e.message); } }));
   $$("[data-imp]", m).forEach((b) => (b.onclick = async () => {
     b.textContent = "…";
-    try { const r = await api("/api/groups/" + b.dataset.imp + "/import-users", { method: "POST" }); toast(`${r.created} compte(s) créé(s), ${r.linked} rattaché(s) / ${r.total}`); ADMIN_TABS.groups(); }
+    try { const r = await api("/api/groups/" + b.dataset.imp + "/import-users", { method: "POST" }); toast(`${r.created} compte(s) créé(s), ${r.linked} rattaché(s) / ${r.total}`); await reloadAdminTab("groups"); }
     catch (e) { toast(e.message); b.textContent = "👥"; }
   }));
   $$("[data-ren]", m).forEach((b) => (b.onclick = () => {
     const g = adminData.groups.find((x) => x.id == b.dataset.ren);
     modal("Modifier le groupe", `<label>Nom</label><input id="ngName" value="${esc(g.name)}"><label>Description</label><input id="ngDesc" value="${esc(g.description || "")}">`, async () => {
       await api("/api/groups/" + g.id, { method: "PATCH", body: JSON.stringify({ name: $("#ngName").value, description: $("#ngDesc").value }) });
-      toast("Groupe mis à jour"); ADMIN_TABS.groups();
+      toast("Groupe mis à jour"); await reloadAdminTab("groups");
     });
   }));
   $$("[data-del]", m).forEach((b) => (b.onclick = async () => {
     if (!confirmDel("ce groupe (et les droits qui lui sont donnés)")) return;
-    try { await api("/api/groups/" + b.dataset.del, { method: "DELETE" }); ADMIN_TABS.groups(); } catch (e) { toast(e.message); }
+    try { await api("/api/groups/" + b.dataset.del, { method: "DELETE" }); await reloadAdminTab("groups"); } catch (e) { toast(e.message); }
   }));
 };
 
 // ---- Utilisateurs ----
 ADMIN_TABS.users = async function () {
-  await loadRefs();
-  const [users, sites] = await Promise.all([api("/api/users"), api("/api/sites")]);
-  adminData.users = users; adminData.sites = sites;
+  await loadRefs("users", ["users", "sites"]);   // utilisateurs affichés même si les sites manquent
+  const users = adminData.users;
   const m = $("#adminMain");
   const src = { local: "Local", ldap: "AD", sso: "SSO" };
   m.innerHTML = `<div class="admin-head"><h1>Utilisateurs</h1><button class="btn-accent" id="addUser">＋ Ajouter</button></div>
@@ -677,11 +809,12 @@ ADMIN_TABS.users = async function () {
       <td>${esc(u.site || "—")}</td><td>${u.groups}</td>
       <td>${u.role === "ADMIN" ? `<span class="badge admin">Admin</span>` : "Utilisateur"}</td>
       <td style="text-align:right;white-space:nowrap"><button class="icon-btn" data-edit="${u.id}" title="Modifier">✏️</button>${u.id === state.me.id ? "" : `<button class="icon-btn" data-del="${u.id}" title="Supprimer">🗑️</button>`}</td></tr>`).join("")}</tbody></table></div>`;
+  refsNotice(m);
   $("#addUser").onclick = () => userForm();
   $$("[data-edit]", m).forEach((b) => (b.onclick = () => userForm(users.find((x) => x.id == b.dataset.edit))));
   $$("[data-del]", m).forEach((b) => (b.onclick = async () => {
     if (!confirmDel("cet utilisateur")) return;
-    try { await api("/api/users/" + b.dataset.del, { method: "DELETE" }); ADMIN_TABS.users(); } catch (e) { toast(e.message); }
+    try { await api("/api/users/" + b.dataset.del, { method: "DELETE" }); await reloadAdminTab("users"); } catch (e) { toast(e.message); }
   }));
 };
 function ovTable(id, items, current) {
@@ -693,6 +826,7 @@ function ovTable(id, items, current) {
 }
 function ovValues(id) { return $$("#" + id + " select").filter((s) => s.value).map((s) => ({ id: Number(s.dataset.id), effect: s.value })); }
 function userForm(u) {
+  if (!refsComplete()) return;
   const siteOpts = adminData.sites.map((s) => `<option value="${s.id}" ${u?.site_id == s.id ? "selected" : ""}>${esc(s.name)}</option>`).join("");
   const localGroups = adminData.groups.filter((g) => g.source === "local" && !g.is_everyone).map((g) => ({ id: g.id, label: g.name }));
   const isNew = !u, isLocal = !u || u.auth_source === "local", isMe = u && u.id === state.me.id;
@@ -734,7 +868,7 @@ function userForm(u) {
       }
       await api("/api/users/" + u.id, { method: "PATCH", body: JSON.stringify(payload) });
     }
-    toast("Utilisateur enregistré"); ADMIN_TABS.users();
+    toast("Utilisateur enregistré"); await reloadAdminTab("users");
   });
 }
 
@@ -752,7 +886,7 @@ ADMIN_TABS.sites = async function () {
   $$("[data-edit]", m).forEach((b) => (b.onclick = () => siteForm(sites.find((x) => x.id == b.dataset.edit))));
   $$("[data-del]", m).forEach((b) => (b.onclick = async () => {
     if (!confirmDel("ce site")) return;
-    try { await api("/api/sites/" + b.dataset.del, { method: "DELETE" }); ADMIN_TABS.sites(); } catch (e) { toast(e.message); }
+    try { await api("/api/sites/" + b.dataset.del, { method: "DELETE" }); await reloadAdminTab("sites"); } catch (e) { toast(e.message); }
   }));
 };
 function siteForm(s) {
@@ -765,7 +899,7 @@ function siteForm(s) {
     const payload = { name: $("#sName").value.trim(), latitude: Number($("#sLat").value), longitude: Number($("#sLon").value) };
     if (!payload.name || $("#sLat").value === "" || $("#sLon").value === "") throw new Error("Nom et coordonnées requis");
     await api(s ? "/api/sites/" + s.id : "/api/sites", { method: s ? "PATCH" : "POST", body: JSON.stringify(payload) });
-    toast("Site enregistré"); ADMIN_TABS.sites();
+    toast("Site enregistré"); await reloadAdminTab("sites");
   });
   bindCityPicker("sCity", (c) => { $("#sName").value = c.name; $("#sLat").value = c.latitude; $("#sLon").value = c.longitude; });
 }
@@ -785,7 +919,7 @@ async function refreshUpdateHint() {
       pill.classList.remove("hidden"); badge.classList.remove("hidden");
       pill.onclick = () => enterAdmin("updates");
     }
-  } catch {}
+  } catch (e) { console.warn("MyApps : état des mises à jour non chargé (pastille masquée)", e); }   // purement indicatif
 }
 
 const fmtDate = (iso) => { try { return new Date(iso).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }); } catch { return iso || "—"; } };
@@ -859,7 +993,7 @@ async function installUpdate(version, major, current) {
   try {
     await api("/api/update/install", { method: "POST", body: JSON.stringify({ allow_major: !!major }) });
     toast("Installation lancée");
-    ADMIN_TABS.updates();
+    await reloadAdminTab("updates");
   } catch (e) { toast(e.message); }
 }
 

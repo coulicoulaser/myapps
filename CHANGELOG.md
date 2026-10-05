@@ -3,6 +3,28 @@
 Toutes les évolutions notables sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/), versionnage [SemVer](https://semver.org/lang/fr/) (MAJOR.MINOR.PATCH).
 
+## [1.3.4] — 2026-10-05
+### Corrigé
+- **Portail vide ou trompeur quand une requête échoue** (réseau, proxy qui coupe une grosse
+  réponse…) : si la liste des dashboards ne se charge pas, le portail affiche « Impossible de
+  charger vos tableaux de bord » avec un bouton « Réessayer », au lieu de « Aucun dashboard ne
+  vous est attribué ». Si le dashboard par défaut est inconnu, le premier onglet s'ouvre.
+- **Dashboard qui ne se charge pas** : erreur affichée à sa place avec « Réessayer » (plus
+  seulement une notification de quelques secondes), et l'ancien dashboard ne reste plus affiché
+  sous le nouvel onglet. Clics rapides entre onglets : seul le dernier demandé s'affiche.
+- **Déconnexion sur simple panne passagère** : à l'ouverture, seul un refus du serveur
+  (401/403) efface la session gardée. En cas de serveur injoignable, d'erreur 5xx ou de réponse
+  illisible, l'écran d'attente le signale et réessaie (3 s, 6 s… jusqu'à 30 s), avec un bouton
+  « Revenir à la connexion ».
+- **Administration** : une liste de référence en échec (applications, sections, dashboards,
+  groupes, sites) ne vide plus tout l'onglet. Ce qui est chargé s'affiche, un bandeau indique
+  ce qui manque avec « Réessayer », et les formulaires restent fermés tant qu'il manque une
+  liste (un enregistrement aurait effacé des droits ou un site non affichés). Les utilisateurs
+  s'affichent même si les sites ne se chargent pas. Les onglets en erreur ont aussi « Réessayer ».
+- Messages d'erreur lisibles (« Serveur injoignable… », « Réponse du serveur incomplète ou
+  illisible ») au lieu de « Failed to fetch » ; chaque échec est consigné dans la console du
+  navigateur.
+
 ## [1.3.3] — 2026-10-04
 ### Corrigé
 - **Administration** : en changeant de menu, l'animation d'entrée se jouait d'abord sur le

@@ -123,3 +123,51 @@ def test_animations_desactivables(client, admin_auth):
     client.put("/api/settings", headers=admin_auth, json={"branding": {"animations": False}})
     assert client.get("/api/auth/branding").json()["animations"] is False
     client.put("/api/settings", headers=admin_auth, json={"branding": {"animations": True}})
+
+
+def _search(client, auth):
+    return {a["name"] for a in client.get("/api/me/apps", headers=auth).json()}
+
+
+def _on_dashboards(client, auth):
+    names = set()
+    for d in client.get("/api/me/dashboards", headers=auth).json():
+        for g in client.get(f"/api/me/dashboard/{d['slug']}", headers=auth).json()["groups"]:
+            names |= {a["name"] for a in g["apps"]}
+    return names
+
+
+def test_recherche_limitee_aux_dashboards_visibles(client, admin_auth, user_auth, db):
+    """Une application ouverte à « Tout le monde » mais rangée seulement sur un dashboard
+    réservé (ou dans aucune section) ne doit pas sortir dans la recherche."""
+    ev = _everyone(db).id
+    g = _mk(client, admin_auth, "/api/groups", {"name": "Direction"})["id"]
+    sec = _mk(client, admin_auth, "/api/app-groups", {"name": "Pilotage"})["id"]
+    _mk(client, admin_auth, "/api/apps", {"name": "Tableau secret", "url": "https://secret.tld",
+                                         "app_group_ids": [sec], "group_ids": [ev]})
+    _mk(client, admin_auth, "/api/apps", {"name": "Appli orpheline", "url": "https://orphan.tld",
+                                         "app_group_ids": [], "group_ids": [ev]})
+    _mk(client, admin_auth, "/api/dashboards", {"name": "Direction", "slug": "direction",
+                                                "app_group_ids": [sec], "group_ids": [g]})
+    found = _search(client, user_auth)
+    assert "Tableau secret" not in found and "Appli orpheline" not in found
+    assert found == _on_dashboards(client, user_auth)
+
+    bob = db.exec(select(User).where(User.username == "bob")).one()
+    client.patch(f"/api/users/{bob.id}", headers=admin_auth, json={"local_group_ids": [g]})
+    assert "Tableau secret" in _search(client, user_auth)
+    assert _search(client, user_auth) == _on_dashboards(client, user_auth)
+    client.patch(f"/api/users/{bob.id}", headers=admin_auth, json={"local_group_ids": []})
+
+
+def test_recherche_respecte_le_droit_sur_l_application(client, admin_auth, user_auth, db):
+    """Section visible, mais application réservée à un groupe dont bob n'est pas."""
+    ev = _everyone(db).id
+    g = _mk(client, admin_auth, "/api/groups", {"name": "RH"})["id"]
+    sec = _mk(client, admin_auth, "/api/app-groups", {"name": "Outils"})["id"]
+    _mk(client, admin_auth, "/api/apps", {"name": "Paie RH", "url": "https://rh.tld",
+                                         "app_group_ids": [sec], "group_ids": [g]})
+    _mk(client, admin_auth, "/api/dashboards", {"name": "Outils", "slug": "outils",
+                                                "app_group_ids": [sec], "group_ids": [ev]})
+    assert "Paie RH" not in _search(client, user_auth)
+    assert _search(client, user_auth) == _on_dashboards(client, user_auth)

@@ -114,6 +114,16 @@ def dashboard_payload(db: Session, user: User, slug: str) -> Optional[dict]:
 
 
 def visible_apps_flat(db: Session, user: User) -> list[dict]:
-    ids = allowed_app_ids(db, user)
+    """Applications proposées par la recherche : exactement celles que l'utilisateur voit
+    sur ses dashboards. Le droit sur l'application ne suffit pas : rangée seulement dans
+    une section d'un dashboard qu'il ne voit pas, ou dans aucune section, elle n'apparaît
+    pas (sinon la recherche dévoilerait son nom et son adresse)."""
+    dash_ids = allowed_dashboard_ids(db, user)
+    section_ids = {l.app_group_id for l in db.exec(select(DashboardAppGroup).where(
+        DashboardAppGroup.dashboard_id.in_(dash_ids))).all()} if dash_ids else set()
+    section_ids &= {g.id for g in db.exec(select(AppGroup)).all()}
+    placed = {m.app_id for m in db.exec(select(AppGroupMembership).where(
+        AppGroupMembership.app_group_id.in_(section_ids))).all()} if section_ids else set()
+    ids = allowed_app_ids(db, user) & placed
     rows = [a for a in db.exec(select(App).where(App.is_active == True)).all() if a.id in ids]  # noqa: E712
     return [_app_payload(a) for a in sorted(rows, key=lambda a: a.name.lower())]

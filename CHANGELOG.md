@@ -3,6 +3,19 @@
 Toutes les évolutions notables sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/), versionnage [SemVer](https://semver.org/lang/fr/) (MAJOR.MINOR.PATCH).
 
+## [1.3.6] — 2026-10-09
+### Sécurité
+- **La recherche proposait des applications absentes des dashboards de l'utilisateur** : elle
+  se fondait sur le seul droit de l'application (souvent « Tout le monde », coché par défaut),
+  sans tenir compte des dashboards. Une application rangée seulement sur un dashboard réservé,
+  ou dans aucune section, sortait donc pour tout le monde, avec son nom et son adresse. La
+  recherche ne propose plus que les applications réellement affichées sur les dashboards de
+  l'utilisateur.
+- **Nouvelle application : « Tout le monde » n'est plus coché d'office** dans « Visible par les
+  groupes ». Les groupes se choisissent explicitement ; sans groupe coché, seuls les
+  administrateurs voient l'application. L'assistant de premier démarrage ne change pas : ses
+  applications suivent le choix « Visible par tous » du premier dashboard.
+
 ## [1.3.5] — 2026-10-09
 ### Corrigé
 - **« Logo auto » mettait n'importe quoi** : la recherche par nom sur Wikipédia (captures

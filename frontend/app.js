@@ -605,7 +605,6 @@ ADMIN_TABS.apps = async function () {
 function appForm(a) {
   if (!refsComplete()) return;
   const agOpts = adminData.appGroups.map((g) => ({ id: g.id, label: g.name }));
-  const everyone = adminData.groups.find((g) => g.is_everyone);
   modal(a ? "Modifier l'application" : "Ajouter une application", `
     ${a ? "" : `<label>Suggestions</label><div class="chips">${APP_CATALOG.map((c, k) => `<button type="button" class="chip" data-k="${k}"><img src="${esc(c.logo)}" alt="" loading="lazy">${esc(c.name)}</button>`).join("")}</div>`}
     <label>Nom</label><input id="fName" value="${esc(a?.name || "")}">
@@ -619,7 +618,8 @@ function appForm(a) {
       <label class="check"><input type="checkbox" id="fActive" ${a ? (a.is_active ? "checked" : "") : "checked"}> Affichée</label>
     </div>
     <label>Sections</label>${checklist("fAg", agOpts, a?.app_group_ids)}
-    <label>Visible par les groupes</label>${checklist("fGr", groupOpts(), a ? a.group_ids : (everyone ? [everyone.id] : []))}
+    <label>Visible par les groupes</label>${checklist("fGr", groupOpts(), a?.group_ids)}
+    <p class="muted" style="margin:.3rem 0 0;font-size:.85rem">Aucun groupe coché : seuls les administrateurs la voient.</p>
   `, async () => {
     const payload = {
       name: $("#fName").value.trim(), url: $("#fUrl").value.trim(),

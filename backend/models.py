@@ -6,10 +6,12 @@ Liaisons   : AppGroupMembership, DashboardAppGroup.
 Droits     : AppAccess / DashboardAccess (par groupe),
              UserAppOverride / UserDashboardOverride (exceptions par user, DENY > ALLOW).
 Config     : AppSetting (clé/valeur : apparence, LDAP, SSO, état de l'assistant).
+Usage      : AppUsage (habitudes d'ouverture par utilisateur), UserSetting (préférences).
 """
 from datetime import datetime, timezone
 from typing import Optional
 
+from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 # Rôles applicatifs : ADMIN gère le portail, USER consulte.
@@ -160,4 +162,28 @@ class AppSetting(SQLModel, table=True):
     __tablename__ = "app_settings"
     id: Optional[int] = Field(default=None, primary_key=True)
     key: str = Field(index=True, unique=True)
+    value: Optional[str] = None
+
+
+# --- Usage et préférences ------------------------------------------------------
+class AppUsage(SQLModel, table=True):
+    """Habitudes d'un utilisateur pour une application : score à décroissance
+    exponentielle (voir usage.py), nombre total d'ouvertures, dernière ouverture."""
+    __tablename__ = "app_usage"
+    __table_args__ = (UniqueConstraint("user_id", "app_id"),)
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    app_id: int = Field(foreign_key="apps.id", index=True)
+    score: float = 0.0                                  # valeur à la date last_used
+    count: int = 0
+    last_used: datetime = Field(default_factory=utcnow)
+
+
+class UserSetting(SQLModel, table=True):
+    """Préférence d'un utilisateur (clé/valeur), réglée depuis sa page Profil."""
+    __tablename__ = "user_settings"
+    __table_args__ = (UniqueConstraint("user_id", "key"),)
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    key: str
     value: Optional[str] = None

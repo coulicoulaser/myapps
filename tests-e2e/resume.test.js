@@ -35,6 +35,45 @@ async function login(w, u, p) {
   check($("#view-setup").classList.contains("hidden"), "utilisateur simple : pas d'assistant même s'il n'est pas terminé");
   check(w.document.querySelectorAll("#sections .tile").length === 2, "bob voit les 2 tuiles (dashboard « Tout le monde »)");
   check($("#adminLink").classList.contains("hidden") && $("#editToggle").classList.contains("hidden"), "bob n'a ni administration ni mode édition");
+  const names = () => [...w.document.querySelectorAll("#sections .section:not(.frequent) .tile .tname")].map((t) => t.textContent);
+  check(names().join() === [...names()].sort((a, b) => a.localeCompare(b, "fr", { sensitivity: "base" })).join(), "tuiles en ordre alphabétique");
+  check(!$("#sections .section.frequent"), "pas de « Les plus utilisées » sans historique");
+
+  // Habitudes : chaque tuile ouverte deux fois, puis retour au portail.
+  for (let k = 0; k < 2; k++) for (const t of w.document.querySelectorAll("#sections .tile")) { t.click(); await sleep(80); }
+  await sleep(300);
+  $("#goHome").click();
+  await waitFor(() => $("#sections .section.frequent .tile"), "section « Les plus utilisées »");
+  check($("#sections .section.frequent") === $("#sections .section"), "« Les plus utilisées » au-dessus des sections");
+  check(w.document.querySelectorAll("#sections .section.frequent .tile").length === 2, "les 2 applications ouvertes y figurent");
+
+  // Page Profil : couper la section, réduire les animations.
+  $("#profileLink").click();
+  await waitFor(() => !$("#view-profile").classList.contains("hidden") && $("#pFrequent"), "page Profil");
+  check($("#profileMain").textContent.includes("Bob Durand") && $("#pFrequent").checked, "profil affiché, section activée par défaut");
+  $("#pFrequent").checked = false; $("#pFrequent").dispatchEvent(new w.Event("change"));
+  await waitFor(() => !$("#pFrequent").disabled, "préférence enregistrée");
+  $("#pMotion").checked = true; $("#pMotion").dispatchEvent(new w.Event("change"));
+  await waitFor(() => w.document.documentElement.classList.contains("no-motion"), "animations réduites");
+  check(true, "« Réduire les animations » appliqué aussitôt");
+  $("#profileBack").click();
+  await waitFor(() => !$("#view-app").classList.contains("hidden") && $("#sections .tile"), "retour au portail");
+  await sleep(200);
+  check(!$("#sections .section.frequent"), "section masquée une fois désactivée");
+
+  w = await page(); $ = (s) => w.document.querySelector(s);
+  await login(w, "bob", "bob-pw-1234");
+  await waitFor(() => !$("#view-app").classList.contains("hidden") && $("#sections .tile"), "portail bob (nouvelle session)");
+  check(w.document.documentElement.classList.contains("no-motion"), "préférence d'animation retrouvée à la connexion");
+  $("#profileLink").click();
+  await waitFor(() => $("#pClear"), "page Profil");
+  $("#pFrequent").checked = true; $("#pFrequent").dispatchEvent(new w.Event("change"));
+  await waitFor(() => !$("#pFrequent").disabled, "préférence enregistrée");
+  $("#pClear").click(); await sleep(300);
+  $("#profileBack").click();
+  await waitFor(() => !$("#view-app").classList.contains("hidden") && $("#sections .tile"), "retour au portail");
+  await sleep(200);
+  check(!$("#sections .section.frequent"), "historique effacé : plus de « Les plus utilisées »");
 
   w = await page(); $ = (s) => w.document.querySelector(s);
   await login(w, "alice", "Tr0ub4dor&3x");

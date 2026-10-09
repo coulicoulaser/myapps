@@ -28,7 +28,6 @@ ADMIN_ROUTES = [
     ("app-groups-create",   "POST",   "/api/app-groups",               {"json": {"name": "G"}}),
     ("app-groups-patch",    "PATCH",  "/api/app-groups/1",             {"json": {"name": "G"}}),
     ("app-groups-delete",   "DELETE", "/api/app-groups/1",             {}),
-    ("app-groups-reorder",  "POST",   "/api/app-groups/1/reorder",     {"json": {"ids": [1]}}),
     ("dashboards-list",     "GET",    "/api/dashboards",               {}),
     ("dashboards-create",   "POST",   "/api/dashboards",               {"json": {"name": "D", "slug": "d"}}),
     ("dashboards-patch",    "PATCH",  "/api/dashboards/1",             {"json": {"name": "D", "slug": "d"}}),

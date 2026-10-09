@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Lance un serveur MyApps jetable (données temporaires), puis les parcours e2e :
 #   1. wizard.test.js : assistant complet (code, admin, identité, fonds, dashboard, apps, portail, admin)
-#   2. resume.test.js : utilisateur simple, reprise de l'assistant par un admin
+#   2. resume.test.js : utilisateur simple (habitudes, profil), reprise de l'assistant par un admin
 # Prérequis : ../.venv (pip install -r ../requirements.txt), Node 18+, `npm install` ici.
 # La recherche de ville et la météo appellent Open-Meteo : accès Internet requis.
 set -euo pipefail
 cd "$(dirname "$0")"
 [[ -d node_modules ]] || npm install --silent
 TMP="$(mktemp -d)"; PORT="${PORT:-8199}"
-export MYAPPS_DATA_DIR="$TMP" JWT_SECRET="$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))')"
+export MYAPPS_DATA_DIR="$TMP" MYAPPS_USAGE_DEBOUNCE=0 JWT_SECRET="$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))')"
 (cd ../backend && exec ../.venv/bin/uvicorn app:app --port "$PORT" --log-level warning) &
 SRV=$!
 trap 'kill $SRV 2>/dev/null; rm -rf "$TMP"' EXIT

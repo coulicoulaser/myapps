@@ -3,6 +3,7 @@
 Visible si un groupe de l'utilisateur a accès (« Tout le monde » inclus d'office).
 Les exceptions par utilisateur priment : DENY > ALLOW > règle de groupe. ADMIN voit tout.
 """
+import unicodedata
 from typing import Optional
 
 from sqlmodel import Session, select
@@ -10,6 +11,7 @@ from sqlmodel import Session, select
 from models import (App, AppAccess, AppGroup, AppGroupMembership, Dashboard,
                     DashboardAccess, DashboardAppGroup, Group, GroupMembership,
                     User, UserAppOverride, UserDashboardOverride)
+import usage
 
 
 def user_group_ids(db: Session, user: User) -> list[int]:
@@ -78,6 +80,11 @@ def default_dashboard_slug(db: Session, user: User) -> Optional[str]:
     return vis[0].slug if vis else None
 
 
+def name_key(name: str) -> str:
+    """Clé de tri alphabétique : sans accents ni casse (« Éditeur » entre « Doc » et « Fax »)."""
+    return unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode().casefold()
+
+
 def _app_payload(a: App) -> dict:
     return {"id": a.id, "name": a.name, "url": a.url, "image_url": a.image_url,
             "tooltip": a.tooltip, "open_new_tab": a.open_new_tab}
@@ -98,19 +105,22 @@ def dashboard_payload(db: Session, user: User, slug: str) -> Optional[dict]:
         ag = db.get(AppGroup, link.app_group_id)
         if not ag:
             continue
-        mems = sorted(db.exec(select(AppGroupMembership).where(AppGroupMembership.app_group_id == ag.id)).all(),
-                      key=lambda x: x.sort_order)
-        apps = []
-        for m in mems:
-            a = db.get(App, m.app_id)
-            if a and a.is_active and a.id in allowed_apps:
-                apps.append(_app_payload(a))
+        mems = db.exec(select(AppGroupMembership).where(AppGroupMembership.app_group_id == ag.id)).all()
+        rows = [a for a in (db.get(App, m.app_id) for m in mems) if a and a.is_active and a.id in allowed_apps]
+        # Applications toujours en ordre alphabétique dans une section.
+        apps = [_app_payload(a) for a in sorted(rows, key=lambda a: (name_key(a.name), a.id))]
         if apps or user.role == "ADMIN":
             groups_out.append({"id": ag.id, "name": ag.name, "icon": ag.icon,
                                "color": ag.color, "apps": apps})
 
+    # « Les plus utilisées » : parmi les applications affichées sur CE dashboard.
+    frequent = []
+    if usage.get_prefs(db, user.id)["frequent"]:
+        shown = {a["id"]: a for g in groups_out for a in g["apps"]}
+        frequent = [shown[i] for i in usage.frequent_ids(db, user.id, set(shown))]
+
     return {"id": d.id, "name": d.name, "slug": d.slug,
-            "background_url": d.background_url, "groups": groups_out}
+            "background_url": d.background_url, "groups": groups_out, "frequent": frequent}
 
 
 def visible_apps_flat(db: Session, user: User) -> list[dict]:
@@ -126,4 +136,4 @@ def visible_apps_flat(db: Session, user: User) -> list[dict]:
         AppGroupMembership.app_group_id.in_(section_ids))).all()} if section_ids else set()
     ids = allowed_app_ids(db, user) & placed
     rows = [a for a in db.exec(select(App).where(App.is_active == True)).all() if a.id in ids]  # noqa: E712
-    return [_app_payload(a) for a in sorted(rows, key=lambda a: a.name.lower())]
+    return [_app_payload(a) for a in sorted(rows, key=lambda a: (name_key(a.name), a.id))]

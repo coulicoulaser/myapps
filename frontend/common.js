@@ -42,6 +42,11 @@ function toast(msg) {
 }
 
 // ---------- Mouvement ----------
+// Animations coupées par l'administrateur (pour tous) ou par l'utilisateur (pour lui).
+function applyMotion() {
+  const off = state.branding?.animations === false || !!state.me?.prefs?.reduce_motion;
+  document.documentElement.classList.toggle("no-motion", off);
+}
 const reducedMotion = () => document.documentElement.classList.contains("no-motion") ||
   window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
@@ -150,7 +155,7 @@ function applyBranding(b) {
   root.setProperty("--base-rgb", hexToRgb(base).join(", "));
   root.setProperty("--bg", "rgb(" + hexToRgb(base).map((v) => Math.round(v * 0.7)).join(", ") + ")");
   applyFonts(b.font_title, b.font_body);
-  document.documentElement.classList.toggle("no-motion", b.animations === false);
+  applyMotion();
   document.title = b.portal_name || "MyApps";
   $("#favicon").href = faviconUrl(b);
   $$(".brand-slot").forEach((el) => (el.innerHTML = lockupHtml(b)));

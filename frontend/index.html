@@ -90,6 +90,7 @@
             <span class="chev">▾</span>
           </button>
           <div class="user-drop hidden" id="userDrop">
+            <a id="profileLink">👤 Mon profil</a>
             <a id="adminLink" class="hidden">⚙️ Administration</a>
             <a id="logoutBtn">⏻ Se déconnecter</a>
           </div>
@@ -133,6 +134,17 @@
       </aside>
       <main class="admin-main" id="adminMain"></main>
     </div>
+  </div>
+
+  <!-- ============ PROFIL (réglages propres à l'utilisateur) ============ -->
+  <div class="hidden vt-page" id="view-profile">
+    <header class="topbar glass">
+      <div class="brand" id="profileBrand"><span class="brand-slot"></span></div>
+      <div class="topbar-right">
+        <button class="btn-ghost" id="profileBack">← Portail</button>
+      </div>
+    </header>
+    <main class="profile-wrap" id="profileMain"></main>
   </div>
 
   <!-- Modale générique -->

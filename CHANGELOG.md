@@ -3,6 +3,25 @@
 Toutes les évolutions notables sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/), versionnage [SemVer](https://semver.org/lang/fr/) (MAJOR.MINOR.PATCH).
 
+## [1.4.0] — 2026-10-09
+### Ajouté
+- **Section « Les plus utilisées »**, propre à chaque utilisateur, en haut de chaque dashboard
+  (au-dessus des sections statiques). MyApps retient les applications ouvertes (tuile, clic
+  molette ou recherche) : chaque ouverture compte, et son poids diminue de moitié tous les
+  14 jours, si bien qu'une habitude récente passe devant une habitude ancienne. La section
+  reprend jusqu'à 8 applications de CE dashboard, ouvertes au moins deux fois ; elle reste
+  masquée tant que moins de deux applications sont concernées. Les sections statiques ne
+  bougent pas.
+- **Page « Mon profil »** (menu utilisateur) : identité (nom, identifiant, type de compte,
+  groupes, site), activation de la section « Les plus utilisées », « Réduire les animations »
+  pour soi seul, et « Effacer mon historique ». L'historique n'est visible que de
+  l'utilisateur ; il disparaît avec le compte ou avec l'application supprimée.
+
+### Modifié
+- **Applications toujours en ordre alphabétique** dans chaque section (sans tenir compte des
+  accents ni des majuscules). Le glisser-déposer des tuiles en mode édition est retiré ; celui
+  des sections reste.
+
 ## [1.3.6] — 2026-10-09
 ### Sécurité
 - **La recherche proposait des applications absentes des dashboards de l'utilisateur** : elle

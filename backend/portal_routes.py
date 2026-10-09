@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
+import usage
 from config import UPLOAD_DIR
 from database import get_session
 from models import (App, AppAccess, AppGroup, AppGroupMembership, Dashboard,
@@ -47,6 +48,36 @@ def my_dashboard(slug: str, db: Session = Depends(get_session), user: User = Dep
 @portal_router.get("/api/me/apps")
 def my_apps(db: Session = Depends(get_session), user: User = Depends(current_user)):
     return visible_apps_flat(db, user)
+
+
+# ---- Préférences et habitudes (page Profil) ---------------------------------
+@portal_router.get("/api/me/prefs")
+def my_prefs(db: Session = Depends(get_session), user: User = Depends(current_user)):
+    return usage.get_prefs(db, user.id)
+
+
+class PrefsIn(BaseModel):
+    frequent: Optional[bool] = None
+    reduce_motion: Optional[bool] = None
+
+
+@portal_router.put("/api/me/prefs")
+def put_prefs(p: PrefsIn, db: Session = Depends(get_session), user: User = Depends(current_user)):
+    return usage.set_prefs(db, user.id, p.model_dump())
+
+
+@portal_router.post("/api/me/usage/{app_id}", status_code=204)
+def record_usage(app_id: int, db: Session = Depends(get_session), user: User = Depends(current_user)):
+    """Ouverture d'une application depuis une tuile ou la recherche. Seules les
+    applications que l'utilisateur voit sont comptées."""
+    if app_id not in {a["id"] for a in visible_apps_flat(db, user)}:
+        raise HTTPException(404, "Application introuvable ou non autorisée")
+    usage.record(db, user.id, app_id)
+
+
+@portal_router.delete("/api/me/usage")
+def clear_usage(db: Session = Depends(get_session), user: User = Depends(current_user)):
+    return {"deleted": usage.clear(db, user.id)}
 
 
 # ---- Météo (Open-Meteo, sans clé) ------------------------------------------
@@ -247,24 +278,11 @@ async def upload_image(file: UploadFile = File(...), _: User = Depends(require_a
 
 
 # ============================================================================
-# Réordonnancement (admin) — drag & drop
+# Réordonnancement (admin) — drag & drop des sections (les applications d'une
+# section sont toujours en ordre alphabétique)
 # ============================================================================
 class ReorderIn(BaseModel):
     ids: list[int]
-
-
-@admin_crud.post("/api/app-groups/{gid}/reorder")
-def reorder_apps(gid: int, payload: ReorderIn, db: Session = Depends(get_session),
-                 _: User = Depends(require_admin)):
-    """Ordre des apps (tuiles) dans un groupe."""
-    for i, aid in enumerate(payload.ids):
-        m = db.exec(select(AppGroupMembership).where(
-            AppGroupMembership.app_group_id == gid, AppGroupMembership.app_id == aid)).first()
-        if m:
-            m.sort_order = i
-            db.add(m)
-    db.commit()
-    return {"ok": True}
 
 
 @admin_crud.post("/api/dashboards/{did}/reorder")
@@ -358,6 +376,7 @@ def delete_app(aid: int, db: Session = Depends(get_session), _: User = Depends(r
         db.delete(m)
     for x in db.exec(select(AppAccess).where(AppAccess.app_id == aid)).all():
         db.delete(x)
+    usage.forget_app(db, aid)
     db.delete(a)
     db.commit()
 

@@ -12,6 +12,7 @@ from sqlmodel import Session, select
 from database import get_session
 from models import (DashboardAccess, Group, GroupMembership, Site, User,
                     UserAppOverride, UserDashboardOverride)
+import usage
 from rights import user_group_ids
 from security import (FONTS, MIN_PASSWORD_LENGTH, SEARCH_ENGINES, _service_conn, apply_ad_identity,
                       authenticate_user, clean_color, clean_image_url, create_token,
@@ -38,6 +39,7 @@ def user_payload(db: Session, user: User) -> dict:
         "id": user.id, "username": user.username, "full_name": user.full_name,
         "email": user.email, "role": user.role, "is_admin": user.role == "ADMIN",
         "auth_source": user.auth_source,
+        "prefs": usage.get_prefs(db, user.id),
         "site": {"slug": site.slug, "name": site.name} if site else None,
         "groups": gnames,
     }
@@ -536,6 +538,7 @@ def delete_user(uid: int, db: Session = Depends(get_session), me: User = Depends
         db.delete(o)
     for m in db.exec(select(GroupMembership).where(GroupMembership.user_id == uid)).all():
         db.delete(m)
+    usage.forget_user(db, uid)
     db.delete(u)
     db.commit()
 

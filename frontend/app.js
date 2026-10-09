@@ -5,7 +5,7 @@
 function show(view) {
   $("#splash").classList.add("hidden");
   $("#view-setup").classList.add("hidden");
-  ["login", "app", "admin"].forEach((v) => $("#view-" + v).classList.toggle("hidden", v !== view));
+  ["login", "app", "admin", "profile"].forEach((v) => $("#view-" + v).classList.toggle("hidden", v !== view));
   if (view === "login") setBg(state.branding.login_background || state.branding.dashboard_background || "");
 }
 
@@ -61,6 +61,7 @@ async function resumeSession(attempt = 0) {
 
 // Après connexion : l'assistant reprend pour un admin s'il n'a pas été terminé.
 function afterLogin(withWelcome) {
+  applyMotion();
   if (state.setupRequired && state.me.is_admin) return startWizard({ adminExists: true });
   if (withWelcome) { showWelcome(); enterApp(); setTimeout(hideWelcome, 1500); }
   else enterApp();
@@ -122,6 +123,7 @@ function sessionLost() {
 
 function endSession() {
   saveToken(null); state.token = null; state.me = null;
+  applyMotion();
   $("#loginUser").value = ""; $("#loginPass").value = "";
   closeModal();
   show("login");
@@ -270,33 +272,56 @@ function renderDashboard(d, swap) {
   }
   const editing = state.me.is_admin && state.editMode;
   let n = 0;                                            // rang global des tuiles : cascade d'une section à l'autre
-  sec.innerHTML = d.groups.map((g) => `
+  // « Les plus utilisées » : propre à l'utilisateur, au-dessus des sections ; masquée en
+  // mode édition (elle ne se réordonne pas, elle suit l'usage).
+  const freq = !editing && d.frequent?.length ? `
+    <section class="section frequent">
+      <div class="section-head"><span class="bar"></span>
+        <h2>Les plus utilisées</h2><span class="cnt">${d.frequent.length}</span></div>
+      <div class="grid">${d.frequent.map((a) => tileHtml(a, n++)).join("")}</div>
+    </section>` : "";
+  sec.innerHTML = freq + d.groups.map((g) => `
     <section class="section" data-agid="${g.id}">
       <div class="section-head" ${editing ? 'draggable="true"' : ""}>${editing ? `<span class="drag-h" title="Glisser pour réordonner">⠿</span>` : ""}
         <span class="bar" ${g.color ? `style="background:${esc(g.color)}"` : ""}></span>
         <h2>${esc(g.name)}</h2><span class="cnt">${g.apps.length}</span></div>
-      <div class="grid" data-gid="${g.id}">${g.apps.map((a) => tileHtml(a, editing, n++)).join("") || `<div class="muted">Vide — ajoutez des applications à cette section dans l'administration.</div>`}</div>
+      <div class="grid" data-gid="${g.id}">${g.apps.map((a) => tileHtml(a, n++)).join("") || `<div class="muted">Vide — ajoutez des applications à cette section dans l'administration.</div>`}</div>
     </section>`).join("");
   if (editing) enableDnD();
 }
 
-function tileHtml(a, admin, i = 0) {
+function tileHtml(a, i = 0) {
   const ico = a.image_url ? `<img src="${esc(a.image_url)}" alt="" loading="lazy">` : `<span class="ph">${esc(initials(a.name))}</span>`;
   const tip = a.tooltip ? `<span class="tip">${esc(a.tooltip)}</span>` : "";
   const tgt = a.open_new_tab ? ` target="_blank" rel="noopener"` : "";
-  return `<a class="tile glass" style="--i:${i}" href="${esc(a.url)}"${tgt} data-aid="${a.id}"${admin ? ' draggable="true"' : ""}><div class="ico">${ico}</div><span class="tname">${esc(a.name)}</span>${tip}</a>`;
+  return `<a class="tile glass" style="--i:${i}" href="${esc(a.url)}"${tgt} data-aid="${a.id}"><div class="ico">${ico}</div><span class="tname">${esc(a.name)}</span>${tip}</a>`;
 }
 
-// Glisser-déposer (admin) : tuiles dans une section, sections entre elles.
+// Glisser-déposer (admin) : les sections entre elles. Dans une section, les applications
+// sont toujours en ordre alphabétique.
 function enableDnD() {
-  $$("#sections .tile").forEach((t) => t.addEventListener("click", (e) => { if (state.editMode) e.preventDefault(); }));
-  $$("#sections .grid").forEach((grid) => makeSortable(grid, ".tile", async (ids) => {
-    try { await api(`/api/app-groups/${grid.dataset.gid}/reorder`, { method: "POST", body: JSON.stringify({ ids }) }); toast("Ordre enregistré"); } catch (e) { toast(e.message); }
-  }, "aid"));
   makeSortable($("#sections"), ".section", async (ids) => {
     try { await api(`/api/dashboards/${state.dash.id}/reorder`, { method: "POST", body: JSON.stringify({ ids }) }); toast("Ordre enregistré"); } catch (e) { toast(e.message); }
   }, "agid", ".section-head");
 }
+
+// ---------- Habitudes d'usage ----------
+// Chaque ouverture d'application (tuile ou recherche) est signalée au serveur, qui en tire
+// la section « Les plus utilisées ». keepalive : la requête part même si la page se ferme
+// (application ouverte dans le même onglet). Sans réponse attendue, sans message d'erreur.
+function recordUsage(id) {
+  if (!id || !state.token) return;
+  try {
+    fetch("/api/me/usage/" + encodeURIComponent(id), { method: "POST", keepalive: true,
+      headers: { Authorization: "Bearer " + state.token } }).catch(() => {});
+  } catch {}
+}
+// Clic gauche, et clic molette (ouverture dans un nouvel onglet).
+["click", "auxclick"].forEach((type) => $("#sections").addEventListener(type, (e) => {
+  if (type === "auxclick" && e.button !== 1) return;
+  const t = e.target.closest(".tile[data-aid]");
+  if (t) recordUsage(t.dataset.aid);
+}));
 
 function makeSortable(container, itemSel, onDrop, dataKey, handleSel) {
   let dragEl = null;
@@ -349,7 +374,7 @@ searchInput.addEventListener("keydown", (e) => {
   if (e.key === "Escape") return resetSearch();
   if (e.key === "Enter") {
     const m = matchApps(searchInput.value);
-    if (m[0]) window.open(m[0].url, m[0].open_new_tab ? "_blank" : "_self");
+    if (m[0]) { recordUsage(m[0].id); window.open(m[0].url, m[0].open_new_tab ? "_blank" : "_self"); }
     else webSearch();
     resetSearch();
   }
@@ -378,7 +403,7 @@ function renderSearch() {
   if (!q) { searchDrop.classList.add("hidden"); return; }
   const m = matchApps(q), eng = state.branding.search_engine_name;
   searchDrop.innerHTML =
-    m.map((a) => `<div class="search-item" data-url="${esc(a.url)}" data-nt="${a.open_new_tab}">
+    m.map((a) => `<div class="search-item" data-aid="${a.id}" data-url="${esc(a.url)}" data-nt="${a.open_new_tab}">
       ${a.image_url ? `<img src="${esc(a.image_url)}" alt="">` : `<span class="ig">${esc(initials(a.name))}</span>`}
       <span>${esc(a.name)}</span></div>`).join("") +
     (eng ? `<div class="search-item" id="webItem"><span class="ig">🌐</span><span>Rechercher «&nbsp;${esc(q)}&nbsp;» sur ${esc(eng)}</span></div>` : "") +
@@ -386,7 +411,7 @@ function renderSearch() {
   searchDrop.classList.remove("hidden");
   $$(".search-item[data-url], #webItem", searchDrop).forEach((it) => {
     if (it.id === "webItem") { it.onmousedown = () => { webSearch(); resetSearch(); }; return; }
-    it.onmousedown = () => { window.open(it.dataset.url, it.dataset.nt === "true" ? "_blank" : "_self"); resetSearch(); };
+    it.onmousedown = () => { recordUsage(it.dataset.aid); window.open(it.dataset.url, it.dataset.nt === "true" ? "_blank" : "_self"); resetSearch(); };
   });
 }
 
@@ -395,10 +420,13 @@ $("#userBtn").onclick = () => $("#userDrop").classList.toggle("hidden");
 document.addEventListener("click", (e) => { if (!$("#userMenu").contains(e.target)) $("#userDrop").classList.add("hidden"); });
 $("#logoutBtn").onclick = logout;
 $("#adminLink").onclick = () => { $("#userDrop").classList.add("hidden"); enterAdmin(); };
+$("#profileLink").onclick = () => { $("#userDrop").classList.add("hidden"); enterProfile(); };
 $("#goHome").onclick = () => enterApp();
 const backToPortal = () => { navigate("back", () => show("app")); enterApp(); };
 $("#adminBrand").onclick = backToPortal;
 $("#backPortal").onclick = backToPortal;
+$("#profileBrand").onclick = backToPortal;
+$("#profileBack").onclick = backToPortal;
 
 // ---- Mode édition (admin) ----
 $("#editToggle").onclick = () => {
@@ -413,6 +441,66 @@ function applyEditMode() {
   btn.title = on ? "Verrouiller" : "Mode édition";
   btn.classList.toggle("active", on);
   $("#view-app").classList.toggle("editing", on);
+}
+
+// ---------- Profil (réglages propres à l'utilisateur) ----------
+const AUTH_SOURCES = { local: "Compte local", ldap: "Active Directory", sso: "Connexion unique (SSO)" };
+function enterProfile() {
+  if (!state.me) return;
+  setBg(state.dash?.background_url || state.branding.dashboard_background);
+  navigate("fwd", () => show("profile"));
+  renderProfile();
+}
+function renderProfile() {
+  const me = state.me, p = me.prefs || {};
+  const motionByAdmin = state.branding.animations === false;
+  const sw = (id, on, disabled = false) =>
+    `<label class="switch"><input type="checkbox" id="${id}" ${on ? "checked" : ""} ${disabled ? "disabled" : ""}><span></span></label>`;
+  $("#profileMain").innerHTML = `
+    <div class="admin-head"><h1>Mon profil</h1></div>
+    <section class="glass panel profile-id">
+      <span class="avatar lg">${esc(initials(me.full_name || me.username))}</span>
+      <div class="grow">
+        <div class="t">${esc(me.full_name || me.username)}</div>
+        <div class="s">${esc(me.username)}${me.email ? " · " + esc(me.email) : ""}</div>
+        <div class="s">${esc(AUTH_SOURCES[me.auth_source] || me.auth_source)}${me.is_admin ? " · administrateur" : ""}${me.site ? " · site " + esc(me.site.name) : ""}</div>
+        ${me.groups?.length ? `<div class="chips-ro">${me.groups.map((g) => `<span class="badge off">${esc(g)}</span>`).join("")}</div>` : ""}
+      </div>
+    </section>
+    <section class="glass panel">
+      <h2>Affichage</h2>
+      <div class="pref-row">
+        <div><b>Section « Les plus utilisées »</b>
+          <p class="muted">MyApps retient les applications que vous ouvrez souvent et récemment, et les affiche en haut de chaque dashboard. Les habitudes anciennes s'effacent d'elles-mêmes.</p></div>
+        ${sw("pFrequent", p.frequent)}
+      </div>
+      <div class="pref-row">
+        <div><b>Réduire les animations</b>
+          <p class="muted">${motionByAdmin ? "Les animations sont déjà coupées pour tout le monde par l'administrateur." : "Transitions et effets réduits au minimum, pour vous seul."}</p></div>
+        ${sw("pMotion", motionByAdmin || p.reduce_motion, motionByAdmin)}
+      </div>
+    </section>
+    <section class="glass panel">
+      <h2>Historique d'usage</h2>
+      <div class="pref-row">
+        <p class="muted">Seul le nombre d'ouvertures de chaque application est conservé, pour vous seul ; l'administrateur n'y a pas accès. L'effacer vide la section « Les plus utilisées », qui se reconstruira avec l'usage.</p>
+        <button class="btn-ghost shrink" id="pClear">Effacer mon historique</button>
+      </div>
+    </section>`;
+  const save = async (body, input) => {
+    input.disabled = true;
+    try {
+      state.me.prefs = await api("/api/me/prefs", { method: "PUT", body: JSON.stringify(body) });
+      applyMotion(); toast("Préférence enregistrée");
+    } catch (e) { input.checked = !input.checked; toast(e.message); }
+    finally { input.disabled = false; }
+  };
+  $("#pFrequent").onchange = (e) => save({ frequent: e.target.checked }, e.target);
+  if (!motionByAdmin) $("#pMotion").onchange = (e) => save({ reduce_motion: e.target.checked }, e.target);
+  $("#pClear").onclick = async () => {
+    if (!confirm("Effacer votre historique d'usage ? La section « Les plus utilisées » sera vidée.")) return;
+    try { await api("/api/me/usage", { method: "DELETE" }); toast("Historique effacé"); } catch (e) { toast(e.message); }
+  };
 }
 
 // ---------- Modale ----------

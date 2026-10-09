@@ -203,62 +203,26 @@ async def geocode(q: str = "", _: User = Depends(require_admin)):
 # Récupération auto du logo (admin)
 # ============================================================================
 @admin_crud.get("/api/logo")
-async def fetch_logo(url: str = "", name: str = "", _: User = Depends(require_admin)):
-    import httpx
-    from urllib.parse import urlparse
-    import urllib.parse as urllib_parse
+async def fetch_logo(url: str = "", _: User = Depends(require_admin)):
+    """Cherche le logo de l'application à son adresse (voir favicon.py) et l'enregistre
+    dans les envois : le portail ne dépend pas d'un service tiers pour l'afficher."""
+    import hashlib
 
-    # 1. Recherche par nom sur Wikipedia (meilleure qualité pour les logiciels connus)
-    if name:
-        try:
-            wiki_url = f"https://en.wikipedia.org/w/api.php?action=query&titles={urllib_parse.quote(name)}&prop=pageimages&format=json&pithumbsize=128"
-            async with httpx.AsyncClient(timeout=3, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0"}) as c:
-                r = await c.get(wiki_url)
-                if r.status_code == 200:
-                    data = r.json()
-                    pages = data.get("query", {}).get("pages", {})
-                    for page_id, page_data in pages.items():
-                        if page_id != "-1" and "thumbnail" in page_data:
-                            return {"logo": page_data["thumbnail"]["source"], "candidates": ["wikipedia"]}
-        except Exception:
-            pass
+    import favicon
 
-    candidates = []
-    
-    # 2. Utilisation de l'URL fournie
-    if url:
-        host = urlparse(url if "://" in url else f"https://{url}").hostname
-        if host:
-            candidates.append(f"https://logo.clearbit.com/{host}")
-            candidates.append(f"https://www.google.com/s2/favicons?domain={host}&sz=128")
-            candidates.append(f"https://{host}/favicon.ico")
-
-    # 3. Deviner le domaine via le nom
-    if name:
-        cand_domain = name.lower().replace(" ", "") + ".com"
-        candidates.append(f"https://logo.clearbit.com/{cand_domain}")
-        candidates.append(f"https://www.google.com/s2/favicons?domain={cand_domain}&sz=128")
-
-    if not candidates:
-        raise HTTPException(400, "URL ou Nom invalide")
-
-    async with httpx.AsyncClient(timeout=5, follow_redirects=True) as c:
-        for cand in candidates:
-            try:
-                r = await c.get(cand)
-                # Google favicons renvoie souvent un globe gnrique (image/png) de quelques octets s'il ne trouve rien.
-                # On filtre si possible les tailles de contenu trop petites si c'est un Clearbit (qui peut renvoyer une toute petite image d'erreur).
-                if r.status_code == 200 and r.headers.get("content-type", "").startswith("image"):
-                    return {"logo": cand, "candidates": candidates}
-            except Exception:
-                continue
-
-    # fallback au premier Google favicon candidat s'il y en a un
-    for cand in candidates:
-        if "google.com" in cand:
-            return {"logo": cand, "candidates": candidates}
-
-    return {"logo": "", "candidates": candidates}
+    if not favicon.normalize(url):
+        raise HTTPException(400, "Indiquez d'abord l'adresse (http ou https) de l'application")
+    icon = await favicon.find_logo(url)
+    if not icon:
+        return {"logo": "", "detail": "Aucun logo trouvé à cette adresse : envoyez une image"}
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    # Nommé d'après le contenu : relancer la recherche ne duplique pas le fichier.
+    name = "logo-" + hashlib.sha256(icon.data).hexdigest()[:32] + favicon.EXT[icon.kind]
+    path = UPLOAD_DIR / name
+    if not path.exists():
+        path.write_bytes(icon.data)
+    return {"logo": "/uploads/" + name, "source": icon.source,
+            "size": None if icon.kind == "svg" else icon.size}
 
 
 # ============================================================================

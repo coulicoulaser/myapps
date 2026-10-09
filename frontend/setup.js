@@ -353,13 +353,13 @@ const STEP_APPS = {
       if (!a.url) { $("#wzAppUrl").placeholder = "https://" + slugify(a.name) + ".votre-domaine.fr"; $("#wzAppUrl").focus(); toast("Indiquez l'adresse de votre " + a.name); }
     }));
     $("#wzAppAuto").onclick = async () => {
-      const url = val("wzAppUrl"), name = val("wzAppName");
-      if (!url && !name) return toast("Saisissez d'abord le nom ou l'adresse");
+      const url = val("wzAppUrl");
+      if (!url) { $("#wzAppUrl").focus(); return toast("Saisissez d'abord l'adresse de l'application"); }
       const b = $("#wzAppAuto"); b.textContent = "…";
       try {
-        const p = new URLSearchParams(); if (url) p.append("url", url); if (name) p.append("name", name);
-        const r = await api("/api/logo?" + p);
-        if (r.logo) { $("#wzAppLogo").value = r.logo; $("#wzAppLogo").dispatchEvent(new Event("input")); } else toast("Aucun logo trouvé");
+        const r = await api("/api/logo?" + new URLSearchParams({ url }));
+        if (r.logo) { $("#wzAppLogo").value = r.logo; $("#wzAppLogo").dispatchEvent(new Event("input")); toast(logoFoundMsg(r)); }
+        else toast(r.detail || "Aucun logo trouvé");
       } catch (e) { toast(e.message); } finally { b.textContent = "✨ Logo auto"; }
     };
     $("#wzAppAdd").onclick = async () => { try { await addWizardApp(true); } catch (e) { wizErr(e.message); } };

@@ -640,14 +640,13 @@ function appForm(a) {
     if (!s.url) $("#fUrl").focus();
   }));
   $("#fLogo").onclick = async () => {
-    const url = $("#fUrl").value.trim(), name = $("#fName").value.trim();
-    if (!url && !name) return toast("Saisir l'URL ou le nom d'abord");
+    const url = $("#fUrl").value.trim();
+    if (!url) { $("#fUrl").focus(); return toast("Saisir d'abord l'adresse de l'application"); }
     $("#fLogo").textContent = "…";
     try {
-      const p = new URLSearchParams(); if (url) p.append("url", url); if (name) p.append("name", name);
-      const r = await api("/api/logo?" + p);
-      if (r.logo) { $("#fImg").value = r.logo; $("#fImg").dispatchEvent(new Event("input")); toast("Logo trouvé"); }
-      else toast("Aucun logo trouvé");
+      const r = await api("/api/logo?" + new URLSearchParams({ url }));
+      if (r.logo) { $("#fImg").value = r.logo; $("#fImg").dispatchEvent(new Event("input")); toast(logoFoundMsg(r)); }
+      else toast(r.detail || "Aucun logo trouvé");
     } catch (err) { toast(err.message); } finally { $("#fLogo").textContent = "✨ Logo auto"; }
   };
 }

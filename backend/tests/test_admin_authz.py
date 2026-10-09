@@ -38,7 +38,7 @@ ADMIN_ROUTES = [
     ("sites-patch",         "PATCH",  "/api/sites/1",                  {"json": {"name": "Lyon", "latitude": 45.7, "longitude": 4.8}}),
     ("sites-delete",        "DELETE", "/api/sites/1",                  {}),
     ("geocode",             "GET",    "/api/geocode?q=Lyon",           {}),
-    ("logo",                "GET",    "/api/logo?name=teams",          {}),
+    ("logo",                "GET",    "/api/logo?url=example.invalid",          {}),
     ("upload",              "POST",   "/api/upload",                   {"files": _UPLOAD_FILES}),
     ("setup-complete",      "POST",   "/api/setup/complete",           {}),
     ("setup-restart",       "POST",   "/api/setup/restart",            {}),

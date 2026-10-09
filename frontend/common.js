@@ -273,6 +273,12 @@ function bindCityPicker(id, onPick) {
   $("#" + id + "Q").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); run(); } };
 }
 
+// Résultat de /api/logo : une petite icône est signalée (floue une fois agrandie).
+function logoFoundMsg(r) {
+  if (r.size && r.size < 64) return `Logo trouvé, mais petit (${r.size} px) : envoyez une image plus grande si besoin`;
+  return "Logo trouvé" + (r.size ? ` (${r.size} px)` : " (vectoriel)");
+}
+
 // ---------- Applications proposées ----------
 // url vide = application hébergée chez vous : seule l'adresse est à compléter.
 const fav = (d) => `https://www.google.com/s2/favicons?domain=${d}&sz=128`;

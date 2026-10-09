@@ -3,6 +3,25 @@
 Toutes les évolutions notables sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/), versionnage [SemVer](https://semver.org/lang/fr/) (MAJOR.MINOR.PATCH).
 
+## [1.3.5] — 2026-10-09
+### Corrigé
+- **« Logo auto » mettait n'importe quoi** : la recherche par nom sur Wikipédia (captures
+  d'écran, photos sans rapport), le domaine deviné « nom.com », Clearbit (service fermé) et le
+  globe générique de Google sont abandonnés. Le serveur lit maintenant la page de l'application
+  à son adresse (en suivant les redirections), relève les icônes qu'elle déclare (icône,
+  apple-touch-icon, manifeste web), essaie aussi `/favicon.ico` et `/apple-touch-icon.png`,
+  écarte les fausses images (page d'erreur, icône monochrome, 1 pixel) et garde la meilleure :
+  SVG, sinon la plus grande.
+- Une application qui redirige vers une page de connexion externe (Microsoft, SSO…) ne prend
+  plus le logo du fournisseur d'identité : ses propres icônes passent avant. Google ne sert plus
+  qu'en dernier recours, et seulement s'il connaît vraiment le site.
+- Les applications internes, invisibles d'Internet, ont aussi leur logo (le serveur MyApps les
+  interroge directement, certificat d'autorité interne accepté).
+- Le logo trouvé est enregistré sur le serveur (`/uploads/logo-…`) : le portail ne dépend plus
+  d'un site tiers pour l'afficher, et relancer la recherche ne crée pas de doublon.
+- « Logo auto » demande l'adresse de l'application (le nom seul ne suffit plus) et signale une
+  icône trop petite pour être nette.
+
 ## [1.3.4] — 2026-10-05
 ### Corrigé
 - **Portail vide ou trompeur quand une requête échoue** (réseau, proxy qui coupe une grosse
@@ -21,6 +40,11 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/), versionna
   ce qui manque avec « Réessayer », et les formulaires restent fermés tant qu'il manque une
   liste (un enregistrement aurait effacé des droits ou un site non affichés). Les utilisateurs
   s'affichent même si les sites ne se chargent pas. Les onglets en erreur ont aussi « Réessayer ».
+- **Administration, après un enregistrement ou une suppression** : si le rechargement de la
+  liste échoue, l'erreur s'affiche avec « Réessayer » au lieu de laisser la liste périmée sans
+  rien dire.
+- **Connexion** : un serveur injoignable ou en erreur affiche « Connexion impossible… Réessayez »
+  au lieu de « Identifiants invalides » (réservé au refus du mot de passe).
 - Messages d'erreur lisibles (« Serveur injoignable… », « Réponse du serveur incomplète ou
   illisible ») au lieu de « Failed to fetch » ; chaque échec est consigné dans la console du
   navigateur.

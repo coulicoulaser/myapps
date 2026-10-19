@@ -19,6 +19,8 @@ from typing import Optional
 
 import bcrypt
 import jwt
+
+import secretbox
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlmodel import Session, select
@@ -112,10 +114,15 @@ def clean_color(value: Optional[str]) -> Optional[str]:
 # --- config clé/valeur -------------------------------------------------------
 def get_setting(db: Session, key: str, default=None):
     row = db.exec(select(AppSetting).where(AppSetting.key == key)).first()
-    return row.value if row and row.value is not None else default
+    if not row or row.value is None:
+        return default
+    return secretbox.decrypt(row.value) if key in secretbox.SECRET_KEYS else row.value
 
 
 def set_setting(db: Session, key: str, value):
+    # Secrets (mot de passe du compte de service AD, secret SSO) : jamais en clair en base.
+    if key in secretbox.SECRET_KEYS and value and not secretbox.is_encrypted(str(value)):
+        value = secretbox.encrypt(str(value))
     row = db.exec(select(AppSetting).where(AppSetting.key == key)).first()
     val = "" if value is None else str(value)
     if row:
@@ -526,3 +533,20 @@ def require_admin(user: User = Depends(current_user)) -> User:
     if user.role != "ADMIN":
         raise HTTPException(status_code=403, detail="Réservé aux administrateurs")
     return user
+
+
+def encrypt_stored_secrets(db: Session) -> int:
+    """Démarrage : chiffre en place les secrets encore en clair (installation antérieure)."""
+    if not secretbox.available():
+        secretbox.log.warning("SECRETS_KEY absent : secrets laissés tels quels (relancez install.sh)")
+        return 0
+    n = 0
+    for key in secretbox.SECRET_KEYS:
+        row = db.exec(select(AppSetting).where(AppSetting.key == key)).first()
+        if row and row.value and not secretbox.is_encrypted(row.value):
+            row.value = secretbox.encrypt(row.value)
+            db.add(row)
+            n += 1
+    if n:
+        db.commit()
+    return n

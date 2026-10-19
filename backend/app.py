@@ -12,7 +12,7 @@ from config import FRONTEND_DIR, UPLOAD_DIR, ensure_dirs
 from database import engine, init_db
 from models import User
 from portal_routes import admin_crud, portal_router
-from security import ensure_everyone_group, require_admin
+from security import encrypt_stored_secrets, ensure_everyone_group, require_admin
 from setup_routes import ensure_setup_code, setup_router
 from update_routes import sync_policy_file, update_router
 
@@ -25,6 +25,7 @@ async def lifespan(_app: FastAPI):
     init_db()
     with Session(engine) as s:
         ensure_everyone_group(s)
+        encrypt_stored_secrets(s)
         ensure_setup_code(s)
         sync_policy_file(s)
     yield

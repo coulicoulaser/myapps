@@ -3,6 +3,15 @@
 Toutes les évolutions notables sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/), versionnage [SemVer](https://semver.org/lang/fr/) (MAJOR.MINOR.PATCH).
 
+## [1.4.1] — 2026-10-19
+### Sécurité
+- Le mot de passe du compte de service AD/LDAP et le secret client SSO sont désormais **chiffrés
+  en base** (Fernet). La clé `SECRETS_KEY` est créée par `install.sh` dans le fichier
+  d'environnement du service (`/etc/<nom>/<nom>.env`, 640) et conservée à chaque mise à jour.
+  Les valeurs déjà enregistrées en clair sont chiffrées automatiquement au démarrage.
+- Les sauvegardes faites avant cette version contiennent encore ces secrets en clair : changer le
+  mot de passe du compte de service AD est recommandé une fois la mise à jour installée.
+
 ## [1.4.0] — 2026-10-09
 ### Ajouté
 - **Section « Les plus utilisées »**, propre à chaque utilisateur, en haut de chaque dashboard

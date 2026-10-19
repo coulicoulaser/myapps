@@ -338,16 +338,20 @@ chown -R "$SVC:$SVC" "$DATA_DIR"
 chmod 750 "$DATA_DIR"
 
 mkdir -p "$CONF_DIR"
-JWT_SECRET=""; EXTRA=""
+JWT_SECRET=""; SECRETS_KEY=""; EXTRA=""
 if [[ -f "$ENV_FILE" ]]; then
   JWT_SECRET="$(sed -n 's/^JWT_SECRET=//p' "$ENV_FILE" | head -1)"
+  SECRETS_KEY="$(sed -n 's/^SECRETS_KEY=//p' "$ENV_FILE" | head -1)"
   EXTRA="$(grep -E '^MYAPPS_UPDATE_(REPO|MANIFEST_URL|PUBKEY)=' "$ENV_FILE" || true)"   # surcharges conservées
 fi
 [[ ${#JWT_SECRET} -ge 32 ]] || JWT_SECRET="$ADOPT_SECRET"
 [[ ${#JWT_SECRET} -ge 32 ]] || JWT_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+# Clé de chiffrement des secrets en base : à CONSERVER (sinon ils deviennent illisibles).
+[[ ${#SECRETS_KEY} -eq 44 ]] || SECRETS_KEY="$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')"
 cat > "$ENV_FILE" <<EOF
-$MARKER — relancer install.sh réécrit ce fichier (JWT_SECRET est conservé).
+$MARKER — relancer install.sh réécrit ce fichier (JWT_SECRET et SECRETS_KEY sont conservés).
 JWT_SECRET=$JWT_SECRET
+SECRETS_KEY=$SECRETS_KEY
 MYAPPS_DATA_DIR=$DATA_DIR
 DATABASE_URL=sqlite:///$DB
 # Durée de session : 12 h, ou 30 jours avec « Mémoriser la connexion »

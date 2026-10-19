@@ -14,6 +14,7 @@ _TMP = tempfile.mkdtemp(prefix="myapps_test_")
 os.environ["MYAPPS_DATA_DIR"] = _TMP
 os.environ["DATABASE_URL"] = f"sqlite:///{_TMP}/test.db"
 os.environ.setdefault("JWT_SECRET", "test-secret-" + "x" * 40)
+os.environ.setdefault("GATE_COOKIE_SECURE", "0")   # TestClient en http
 os.environ.setdefault("SECRETS_KEY", "Hl9DpQkW0d0Wq1aVYw5rZ9Bv2mXo7pT4yJc8eN3sLfA=")
 
 from sqlmodel import Session, SQLModel, select  # noqa: E402

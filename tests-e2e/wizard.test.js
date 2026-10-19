@@ -1,15 +1,8 @@
 // Parcours complet de l'assistant dans un DOM simulé (jsdom), contre un vrai serveur.
 const { JSDOM } = require("jsdom");
 const fs = require("fs");
-const BASE = process.env.BASE, CODE = fs.readFileSync(process.env.CODE_FILE, "utf8").trim();
-
-function jsdomFetch(w) {
-  return (u, o = {}) => {
-    if (o.body instanceof w.URLSearchParams)
-      o = { ...o, body: o.body.toString(), headers: { ...(o.headers || {}), "Content-Type": "application/x-www-form-urlencoded" } };
-    return fetch(new URL(u, BASE), o);
-  };
-}
+const { BASE, jar, jsdomFetch } = require("./browser");
+const CODE = fs.readFileSync(process.env.CODE_FILE, "utf8").trim();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function waitFor(fn, label, ms = 8000) {
   const t0 = Date.now();
@@ -21,7 +14,7 @@ function check(cond, msg) { if (!cond) throw new Error("ÉCHEC : " + msg); conso
 (async () => {
   const errors = [];
   const dom = await JSDOM.fromURL(BASE + "/", {
-    runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
+    runScripts: "dangerously", resources: "usable", pretendToBeVisual: true, cookieJar: jar,
     beforeParse(w) {
       w.fetch = jsdomFetch(w);
       w.confirm = () => true;
@@ -100,7 +93,7 @@ function check(cond, msg) { if (!cond) throw new Error("ÉCHEC : " + msg); conso
   check(st.required === false && st.admin_exists === true, "assistant marqué terminé côté serveur");
 
   // Rechargement : plus d'assistant, portail direct (jeton conservé)
-  const dom2 = await JSDOM.fromURL(BASE + "/", { runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
+  const dom2 = await JSDOM.fromURL(BASE + "/", { runScripts: "dangerously", resources: "usable", pretendToBeVisual: true, cookieJar: jar,
     beforeParse(w2) { w2.fetch = jsdomFetch(w2); w2.localStorage.setItem("token", w.localStorage.getItem("token")); } });
   await waitFor(() => !dom2.window.document.querySelector("#view-app").classList.contains("hidden"), "portail au rechargement");
   check(true, "rechargement : portail direct, pas d'assistant");

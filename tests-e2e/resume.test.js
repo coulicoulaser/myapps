@@ -1,27 +1,25 @@
-const { JSDOM } = require("jsdom");
-const BASE = process.env.BASE;
-function jsdomFetch(w) {
-  return (u, o = {}) => {
-    if (o.body instanceof w.URLSearchParams)
-      o = { ...o, body: o.body.toString(), headers: { ...(o.headers || {}), "Content-Type": "application/x-www-form-urlencoded" } };
-    return fetch(new URL(u, BASE), o);
-  };
-}
+const { BASE, open } = require("./browser");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function waitFor(fn, label, ms = 8000) { const t0 = Date.now(); while (Date.now() - t0 < ms) { try { if (fn()) return; } catch {} await sleep(50); } throw new Error("Timeout : " + label); }
 const check = (c, m) => { if (!c) throw new Error("ÉCHEC : " + m); console.log("  ✓ " + m); };
 async function page() {
-  const dom = await JSDOM.fromURL(BASE + "/", { runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
-    beforeParse(w) {
-      w.fetch = jsdomFetch(w);
-      w.confirm = () => true; } });
+  const dom = await open("/", { beforeParse(w) { w.confirm = () => true; } });
   return dom.window;
 }
+// Écran de connexion PUBLIC (aucun code du portail), puis « navigation » vers le portail.
+let loginScreenChecked = false;
 async function login(w, u, p) {
   const $ = (s) => w.document.querySelector(s);
   await waitFor(() => !$("#view-login").classList.contains("hidden"), "page de connexion");
+  if (!loginScreenChecked) {
+    check(![...w.document.scripts].some((s) => /(app|setup)\.js/.test(s.src)) && !$("#view-app"), "écran de connexion : aucun code ni écran du portail");
+    loginScreenChecked = true;
+  }
   $("#loginUser").value = u; $("#loginPass").value = p;
   $("#loginForm").dispatchEvent(new w.Event("submit", { cancelable: true }));
+  await waitFor(() => w.localStorage.getItem("token"), "jeton reçu");
+  const dom = await open("/", { storage: { token: w.localStorage.getItem("token") }, beforeParse(w2) { w2.confirm = () => true; } });
+  return dom.window;
 }
 (async () => {
   const tok = (await (await fetch(BASE + "/api/auth/login", { method: "POST", body: new URLSearchParams({ username: "alice", password: "Tr0ub4dor&3x" }) })).json()).access_token;
@@ -30,7 +28,7 @@ async function login(w, u, p) {
   await fetch(BASE + "/api/setup/restart", { method: "POST", headers: H });
 
   let w = await page(); let $ = (s) => w.document.querySelector(s);
-  await login(w, "bob", "bob-pw-1234");
+  w = await login(w, "bob", "bob-pw-1234"); $ = (s) => w.document.querySelector(s);
   await waitFor(() => !$("#view-app").classList.contains("hidden") && w.document.querySelectorAll("#sections .tile").length, "portail bob");
   check($("#view-setup").classList.contains("hidden"), "utilisateur simple : pas d'assistant même s'il n'est pas terminé");
   check(w.document.querySelectorAll("#sections .tile").length === 2, "bob voit les 2 tuiles (dashboard « Tout le monde »)");
@@ -62,7 +60,7 @@ async function login(w, u, p) {
   check(!$("#sections .section.frequent"), "section masquée une fois désactivée");
 
   w = await page(); $ = (s) => w.document.querySelector(s);
-  await login(w, "bob", "bob-pw-1234");
+  w = await login(w, "bob", "bob-pw-1234"); $ = (s) => w.document.querySelector(s);
   await waitFor(() => !$("#view-app").classList.contains("hidden") && $("#sections .tile"), "portail bob (nouvelle session)");
   check(w.document.documentElement.classList.contains("no-motion"), "préférence d'animation retrouvée à la connexion");
   $("#profileLink").click();
@@ -76,7 +74,7 @@ async function login(w, u, p) {
   check(!$("#sections .section.frequent"), "historique effacé : plus de « Les plus utilisées »");
 
   w = await page(); $ = (s) => w.document.querySelector(s);
-  await login(w, "alice", "Tr0ub4dor&3x");
+  w = await login(w, "alice", "Tr0ub4dor&3x"); $ = (s) => w.document.querySelector(s);
   await waitFor(() => !$("#view-setup").classList.contains("hidden"), "assistant repris");
   check($("#setupBody h1").textContent.includes("Identité"), "admin : l'assistant reprend à l'étape Identité");
   check($("#wzPortal").value === "Intranet Test", "valeurs existantes pré-remplies");

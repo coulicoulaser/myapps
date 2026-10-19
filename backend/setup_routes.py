@@ -17,7 +17,8 @@ import os
 import secrets
 import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+import webgate
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
@@ -117,7 +118,7 @@ class AdminIn(BaseModel):
 
 
 @setup_router.post("/admin")
-def create_admin(p: AdminIn, db: Session = Depends(get_session)):
+def create_admin(p: AdminIn, request: Request, response: Response, db: Session = Depends(get_session)):
     if admin_exists(db):
         raise HTTPException(409, "Un administrateur existe déjà")
     _check_code(p.code)
@@ -137,6 +138,7 @@ def create_admin(p: AdminIn, db: Session = Depends(get_session)):
     SETUP_CODE_FILE.unlink(missing_ok=True)
     log.warning("Assistant : administrateur « %s » créé, code d'installation détruit.", username)
     from auth_routes import user_payload
+    webgate.set_cookie(response, u.username, request=request)   # l'interface reste ouverte une fois l'admin créé
     return {"access_token": create_token(u.username), "token_type": "bearer",
             "user": user_payload(db, u)}
 

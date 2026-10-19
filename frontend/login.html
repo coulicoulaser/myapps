@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MyApps</title>
+  <link rel="icon" id="favicon" href="favicon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Écran de connexion public : servi sans connexion, il ne contient ni donnée ni code du
+       portail (servi seulement une fois connecté). -->
+  <!-- Fond dynamique (image par dashboard) — 2 couches pour fondu enchaîné -->
+  <div class="bg-layer" id="bgLayer"></div>
+  <div class="bg-layer" id="bgLayer2"></div>
+  <div class="bg-veil" id="bgVeil"></div>
+
+  <!-- Écran d'attente le temps de décider : assistant, login ou portail -->
+  <div class="splash" id="splash">
+    <span class="brand-slot lg"></span>
+    <div class="splash-row"><span class="splash-spin"></span><span id="splashMsg">Chargement…</span></div>
+  </div>
+
+  <!-- ============ LOGIN ============ -->
+  <main class="login hidden" id="view-login">
+    <form id="loginForm" class="login-card">
+      <div class="login-logo-wrap"><span class="brand-slot lg"></span></div>
+      <div class="login-body">
+        <label>Identifiant
+          <input id="loginUser" autocomplete="username" required>
+        </label>
+        <label>Mot de passe
+          <input id="loginPass" type="password" autocomplete="current-password" required>
+        </label>
+        <label class="login-remember"><input type="checkbox" id="loginRemember"><span>Mémoriser la connexion pendant 30 jours</span></label>
+        <p class="login-err hidden" id="loginErr"></p>
+        <button class="login-submit" type="submit">Se connecter</button>
+        <div class="login-sep hidden" id="loginSep"><span>ou</span></div>
+        <button type="button" class="sso-btn hidden" id="ssoBtn">Se connecter avec <span id="ssoName">SSO</span></button>
+      </div>
+    </form>
+  </main>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="common.js"></script>
+  <script src="login.js"></script>
+</body>
+</html>

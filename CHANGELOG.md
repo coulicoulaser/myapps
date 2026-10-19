@@ -3,6 +3,20 @@
 Toutes les évolutions notables sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/), versionnage [SemVer](https://semver.org/lang/fr/) (MAJOR.MINOR.PATCH).
 
+## [1.5.0] — 2026-10-19
+### Sécurité
+- **Portail jamais servi sans connexion.** Un visiteur non connecté reçoit seulement un écran de
+  connexion autonome (`login.html` + `login.js`, à l'habillage choisi) : ni le code du portail
+  (`app.js`, `setup.js`), ni ses écrans, ni la liste des applications. À la connexion (identifiants,
+  SSO, création de l'administrateur par l'assistant), le serveur pose un cookie d'accès signé
+  (HttpOnly, SameSite=Strict, « Secure » automatique en HTTPS) ; la page se recharge et sert alors
+  le portail. `/api/auth/me` repose ce cookie pour une session gardée (« Mémoriser »).
+- Nouvelle route `POST /api/auth/logout` : la déconnexion efface ce cookie et ramène à l'écran de
+  connexion (plus rien du portail en mémoire).
+- L'assistant de premier démarrage reste accessible sans connexion tant qu'aucun administrateur
+  n'existe (il est protégé par le code d'installation).
+- Tests e2e : navigateur simulé avec stock de cookies partagé (`tests-e2e/browser.js`).
+
 ## [1.4.1] — 2026-10-19
 ### Sécurité
 - Le mot de passe du compte de service AD/LDAP et le secret client SSO sont désormais **chiffrés

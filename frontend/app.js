@@ -46,7 +46,13 @@ async function resumeSession(attempt = 0) {
   if (r && r.ok) {
     try { state.me = await r.json(); }
     catch (e) { console.error("MyApps : réponse /api/auth/me illisible", e); state.me = null; }
-    if (state.me) { $("#splashMsg").textContent = "Chargement…"; $("#splashLogin")?.remove(); return afterLogin(false); }
+    if (state.me) {
+      $("#splashMsg").textContent = "Chargement…"; $("#splashLogin")?.remove();
+      // Arrivée depuis l'écran de connexion : écran « Bienvenue » comme avant.
+      let welcome = false;
+      try { welcome = sessionStorage.getItem("myapps_welcome") === "1"; sessionStorage.removeItem("myapps_welcome"); } catch {}
+      return afterLogin(welcome);
+    }
   }
   const delay = Math.min(30, 3 * 2 ** attempt);            // 3, 6, 12, 24, puis 30 s
   $("#splashMsg").textContent = `Serveur momentanément injoignable, nouvel essai dans ${delay} s…`;
@@ -109,7 +115,8 @@ $("#loginForm").addEventListener("submit", async (e) => {
 });
 $("#ssoBtn").addEventListener("click", () => { location.href = "/api/auth/sso/login"; });
 
-function logout() { endSession(); }
+// Déconnexion : le serveur efface le cookie d'accès, puis retour à l'écran de connexion public.
+function logout() { fetch("/api/auth/logout", { method: "POST", keepalive: true }).catch(() => {}).finally(endSession); }
 
 // Jeton refusé (expiré, compte désactivé…) : retour à la page de connexion.
 let _lost = false;
@@ -127,6 +134,8 @@ function endSession() {
   $("#loginUser").value = ""; $("#loginPass").value = "";
   closeModal();
   show("login");
+  // Page rechargée : l'écran de connexion public remplace le portail (plus rien en mémoire).
+  location.replace("/");
 }
 
 // ---------- Portail ----------

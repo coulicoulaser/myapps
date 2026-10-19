@@ -3,7 +3,8 @@ import logging
 import secrets
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
+import webgate
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
@@ -46,18 +47,29 @@ def user_payload(db: Session, user: User) -> dict:
 
 
 @auth_router.post("/login")
-def login(form: OAuth2PasswordRequestForm = Depends(), remember: bool = Form(False),
+def login(request: Request, response: Response, form: OAuth2PasswordRequestForm = Depends(), remember: bool = Form(False),
           db: Session = Depends(get_session)):
     user = authenticate_user(db, form.username, form.password)
     if not user:
         raise HTTPException(status_code=401, detail="Identifiants invalides")
+    webgate.set_cookie(response, user.username, remember, request)   # accès à l'interface (cf. webgate)
     token = create_token(user.username, remember=remember)
     return {"access_token": token, "token_type": "bearer", "user": user_payload(db, user)}
 
 
 @auth_router.get("/me")
-def me(user: User = Depends(current_user), db: Session = Depends(get_session)):
+def me(request: Request, response: Response, user: User = Depends(current_user),
+       db: Session = Depends(get_session)):
+    webgate.refresh_cookie(request, response, user.username)
     return user_payload(db, user)
+
+
+@auth_router.post("/logout")
+def logout(request: Request, response: Response):
+    """Le jeton est sans état (oublié par le navigateur) ; on efface le cookie d'accès à
+    l'interface pour que la page suivante soit l'écran de connexion."""
+    webgate.clear_cookie(response, request)
+    return {"ok": True}
 
 
 @auth_router.get("/branding")
@@ -168,6 +180,7 @@ async def sso_callback(request: Request, code: str = "", error: str = "", state:
 
     # Jeton transmis dans le fragment (#) : jamais envoyé au serveur ni journalisé.
     resp = RedirectResponse(f"/#sso_token={create_token(user.username)}")
+    webgate.set_cookie(resp, user.username, request=request)
     resp.delete_cookie(_SSO_STATE_COOKIE)
     return resp
 

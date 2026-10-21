@@ -3,6 +3,14 @@
 Toutes les évolutions notables sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/), versionnage [SemVer](https://semver.org/lang/fr/) (MAJOR.MINOR.PATCH).
 
+## [1.5.1] — 2026-10-21
+### Sécurité
+- **certifi 2026.10.19** (PYSEC-2026-4320 / GHSA-6q48-6c7w-9gw2) : la version précédente
+  faisait encore confiance à des autorités racines emSign dont des clés intermédiaires ont été
+  compromises. certifi fournit les certificats racines utilisés par MyApps pour ses connexions
+  HTTPS sortantes (mises à jour depuis GitHub, logo automatique, météo, SSO).
+- Intégration continue : parcours navigateur simulé sous Node 24 (Node 20 n'est plus maintenu).
+
 ## [1.5.0] — 2026-10-19
 ### Sécurité
 - **Portail jamais servi sans connexion.** Un visiteur non connecté reçoit seulement un écran de

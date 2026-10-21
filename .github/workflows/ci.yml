@@ -43,7 +43,7 @@ jobs:
           python-version: "3.12"
       - uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "24"
       - name: Parcours navigateur simulé (jsdom)
         run: |
           python -m venv .venv

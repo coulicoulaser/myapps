@@ -3,6 +3,14 @@
 Toutes les évolutions notables sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/), versionnage [SemVer](https://semver.org/lang/fr/) (MAJOR.MINOR.PATCH).
 
+## [1.6.0] — 2026-10-22
+### Modifié
+- **Groupes AD imbriqués** : un utilisateur hérite maintenant des groupes qui contiennent
+  ses groupes, à la connexion comme à la synchronisation nocturne. « Importer les membres »
+  d'un groupe AD crée aussi les comptes des membres de ses sous-groupes. Le filtre de groupes
+  des Réglages s'applique toujours : un groupe parent qu'il exclut reste ignoré.
+- Annuaire LDAP autre qu'Active Directory : comportement inchangé (membres directs seulement).
+
 ## [1.5.1] — 2026-10-21
 ### Sécurité
 - **certifi 2026.10.19** (PYSEC-2026-4320 / GHSA-6q48-6c7w-9gw2) : la version précédente

@@ -283,9 +283,15 @@ def ldap_fetch_user(cfg: dict, username: str) -> Optional[dict]:
 
         groups = []
         if user_dn and cfg.get("group_filter"):
-            grp_flt = f"(&{cfg['group_filter']}(member={_ldap_escape(user_dn)}))"
-            conn.search(cfg["base_dn"], grp_flt, SUBTREE, attributes=["cn"])
-            groups = [str(ge.cn) for ge in conn.entries if "cn" in ge]
+            # Groupes directs + groupes parents (imbriqués) ; voir _in_chain_or_direct.
+            seen: set[str] = set()
+            for flt in _in_chain_or_direct("member", user_dn):
+                conn.search(cfg["base_dn"], f"(&{cfg['group_filter']}{flt})", SUBTREE, attributes=["cn"])
+                for ge in conn.entries:
+                    cn = _attr(ge, "cn")
+                    if cn and cn not in seen:
+                        seen.add(cn)
+                        groups.append(cn)
         elif "memberOf" in e:
             member_of = list(e.memberOf.values)
             groups = [m.group(1) for m in (re.search(r"CN=([^,]+)", dn) for dn in member_of) if m]
@@ -332,8 +338,21 @@ def ldap_authenticate(cfg: dict, username: str, password: str) -> bool:
         return False
 
 
+# LDAP_MATCHING_RULE_IN_CHAIN : appartenance transitive (groupes imbriqués), propre à l'AD.
+IN_CHAIN = "1.2.840.113556.1.4.1941"
+
+
+def _in_chain_or_direct(attr: str, dn: str) -> tuple[str, str]:
+    """Filtres d'appartenance à interroger tous les deux, résultats fusionnés : la règle
+    IN_CHAIN de l'AD (groupes imbriqués), puis la forme directe pour les annuaires qui
+    ne la connaissent pas (OpenLDAP n'y renvoie rien, sans erreur)."""
+    esc = _ldap_escape(dn)
+    return f"({attr}:{IN_CHAIN}:={esc})", f"({attr}={esc})"
+
+
 def ldap_group_members(cfg: dict, group_dn: str) -> list[dict]:
-    """Membres directs d'un groupe AD -> [{username, display_name, email, site}]."""
+    """Membres d'un groupe AD, y compris via des groupes imbriqués
+    -> [{username, display_name, email, site}]."""
     from ldap3 import SUBTREE
     out: list[dict] = []
     if not group_dn:
@@ -342,13 +361,17 @@ def ldap_group_members(cfg: dict, group_dn: str) -> list[dict]:
         conn = _service_conn(cfg)
         if not conn:
             return out
-        flt = f"(&(objectClass=user)(memberOf={_ldap_escape(group_dn)}))"
         attrs = ["sAMAccountName", "displayName", "mail", cfg["site_attr"]]
-        conn.search(cfg["base_dn"], flt, SUBTREE, attributes=attrs)
-        for e in conn.entries:
+        entries = []
+        for member_flt in _in_chain_or_direct("memberOf", group_dn):
+            conn.search(cfg["base_dn"], f"(&(objectClass=user){member_flt})", SUBTREE, attributes=attrs)
+            entries.extend(conn.entries)
+        seen: set[str] = set()
+        for e in entries:
             uname = _attr(e, "sAMAccountName")
-            if not uname:
+            if not uname or uname in seen:
                 continue
+            seen.add(uname)
             site_vals = e[cfg["site_attr"]].values if cfg["site_attr"] in e else []
             out.append({
                 "username": uname,
